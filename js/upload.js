@@ -454,11 +454,15 @@ function mergeItemsWithMedia(items, mediaMap) {
   });
 }
 
-function persistHistory(meta) {
+function persistHistory(entry) {
   const key = "eval_history";
   const oldData = JSON.parse(localStorage.getItem(key) || "[]");
-  oldData.unshift(meta);
-  localStorage.setItem(key, JSON.stringify(oldData.slice(0, 100)));
+  oldData.unshift(entry);
+  localStorage.setItem(key, JSON.stringify(oldData.slice(0, 50)));
+}
+
+function genRunId() {
+  return `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function loadTaskTemplate(taskType) {
@@ -663,6 +667,16 @@ runEvalBtn.addEventListener("click", async () => {
     }
 
     const report = aggregateReport(results, dimensions);
+    const runId = genRunId();
+    const createdAt = new Date().toISOString();
+    const fullReport = {
+      ...report,
+      run_id: runId,
+      created_at: createdAt,
+      task_type: taskType,
+      model_name: modelName,
+      dimensions: dimensions.map((d) => ({ name: d.name, criteria: d.criteria }))
+    };
     const record = {
       task_type: taskType,
       model_name: modelName,
@@ -670,21 +684,25 @@ runEvalBtn.addEventListener("click", async () => {
       dimensions,
       raw_results: results,
       avg_score: report.avg_score,
-      created_at: new Date().toISOString()
+      created_at: createdAt
     };
 
     await saveToSupabase(record);
 
-    localStorage.setItem("latest_eval_report", JSON.stringify(report));
+    localStorage.setItem("latest_eval_report", JSON.stringify(fullReport));
     persistHistory({
+      id: runId,
+      created_at: createdAt,
       task_type: taskType,
       model_name: modelName,
       avg_score: report.avg_score,
-      created_at: record.created_at
+      avg_by_dimension: report.avg_by_dimension,
+      dimensions: dimensions.map((d) => ({ name: d.name, criteria: d.criteria })),
+      report: fullReport
     });
 
     setStatus("评测完成，正在跳转报告页...");
-    window.location.href = "./report.html";
+    window.location.href = `./report.html?id=${encodeURIComponent(runId)}`;
   } catch (err) {
     setStatus(`执行失败：${err.message}`);
   }

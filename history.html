@@ -5,31 +5,204 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>历史评测记录</title>
   <link rel="stylesheet" href="./css/style.css" />
+  <style>
+    .history-item {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 14px;
+      background: #fff;
+    }
+    .history-item h3 {
+      margin: 0 0 6px;
+      font-size: 1rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .history-meta {
+      color: #6b7280;
+      font-size: 0.85rem;
+      margin-bottom: 10px;
+    }
+    .history-meta span { margin-right: 12px; }
+    .dim-chip {
+      display: inline-block;
+      padding: 3px 8px;
+      margin: 2px 4px 2px 0;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #3730a3;
+      font-size: 0.8rem;
+      cursor: default;
+    }
+    .dim-list {
+      margin: 6px 0 10px;
+      padding-left: 0;
+      list-style: none;
+    }
+    .dim-list li {
+      padding: 6px 10px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      margin-bottom: 4px;
+      font-size: 0.85rem;
+    }
+    .dim-list li strong { color: #111827; margin-right: 6px; }
+    .dim-list li .criteria { color: #4b5563; }
+    .dim-list li .avg { float: right; color: #2563eb; font-weight: 600; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn-view, .btn-del {
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .btn-view { background: #2563eb; color: #fff; }
+    .btn-view:hover { background: #1d4ed8; }
+    .btn-del { background: #fee2e2; color: #b91c1c; }
+    .btn-del:hover { background: #fecaca; }
+    .btn-clear { background: #f3f4f6; color: #374151; }
+    .btn-clear:hover { background: #e5e7eb; }
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: #6b7280;
+    }
+    details summary {
+      cursor: pointer;
+      font-size: 0.85rem;
+      color: #6b7280;
+      margin-bottom: 4px;
+    }
+  </style>
 </head>
 <body>
   <main class="container">
     <h1>历史评测记录</h1>
-    <div id="historyList" class="card"></div>
-    <a href="./app.html">回评测页</a>
+    <div class="toolbar">
+      <a href="./app.html">← 返回评测页</a>
+      <button id="clearAllBtn" class="btn-del btn-clear">清空全部历史</button>
+    </div>
+    <div id="historyList"></div>
   </main>
 
   <script src="./js/auth.js"></script>
   <script>
     window.Auth.requireAuth("/index.html");
-    const listEl = document.getElementById("historyList");
-    const items = JSON.parse(localStorage.getItem("eval_history") || "[]");
 
-    if (!items.length) {
-      listEl.textContent = "目前没有历史数据。";
-    } else {
-      const ul = document.createElement("ul");
-      items.forEach((x) => {
-        const li = document.createElement("li");
-        li.textContent = `${x.created_at} | ${x.task_type} | ${x.model_name} | 平均分: ${x.avg_score}`;
-        ul.appendChild(li);
-      });
-      listEl.appendChild(ul);
+    const KEY = "eval_history";
+    const listEl = document.getElementById("historyList");
+    const clearAllBtn = document.getElementById("clearAllBtn");
+
+    function escapeHtml(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
     }
+
+    function formatTime(iso) {
+      if (!iso) return "";
+      try { return new Date(iso).toLocaleString(); } catch (_e) { return iso; }
+    }
+
+    function loadHistory() {
+      try {
+        return JSON.parse(localStorage.getItem(KEY) || "[]");
+      } catch (_e) {
+        return [];
+      }
+    }
+
+    function saveHistory(list) {
+      localStorage.setItem(KEY, JSON.stringify(list));
+    }
+
+    function render() {
+      const items = loadHistory();
+      if (!items.length) {
+        listEl.innerHTML = `<div class="empty">目前没有历史数据。返回 <a href="./app.html">评测页</a> 开始吧。</div>`;
+        return;
+      }
+
+      listEl.innerHTML = items.map((x, idx) => {
+        const avg = x.avg_score == null ? "—" : x.avg_score;
+        const dims = Array.isArray(x.dimensions) ? x.dimensions : [];
+        const avgByDim = x.avg_by_dimension || {};
+
+        const dimList = dims.length
+          ? `<ul class="dim-list">
+              ${dims.map((d) => {
+                const a = avgByDim[d.name];
+                const aText = a == null ? "—" : a;
+                return `<li>
+                  <span class="avg">平均 ${escapeHtml(aText)}</span>
+                  <strong>${escapeHtml(d.name)}</strong>
+                  <span class="criteria">${escapeHtml(d.criteria || "（未填写评分标准）")}</span>
+                </li>`;
+              }).join("")}
+            </ul>`
+          : `<div class="history-meta">（该记录无维度信息）</div>`;
+
+        const id = x.id || `legacy_${idx}`;
+        return `
+          <div class="history-item" data-id="${escapeHtml(id)}">
+            <h3>
+              <span>${escapeHtml(x.task_type || "—")} · ${escapeHtml(x.model_name || "—")}</span>
+              <span style="color:#2563eb;">综合平均：${escapeHtml(avg)}</span>
+            </h3>
+            <div class="history-meta">
+              <span>时间：${escapeHtml(formatTime(x.created_at))}</span>
+              <span>样本数：${escapeHtml(x.report?.total_items ?? "—")}</span>
+              <span>维度数：${escapeHtml(dims.length)}</span>
+            </div>
+            <details ${idx === 0 ? "open" : ""}>
+              <summary>查看维度与评分标准</summary>
+              ${dimList}
+            </details>
+            <div class="actions" style="margin-top:10px;">
+              ${x.id && x.report ? `<button class="btn-view" data-act="view" data-id="${escapeHtml(id)}">查看报告</button>` : ""}
+              <button class="btn-del" data-act="del" data-id="${escapeHtml(id)}">删除</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    listEl.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-act]");
+      if (!btn) return;
+      const act = btn.getAttribute("data-act");
+      const id = btn.getAttribute("data-id");
+      if (act === "view") {
+        window.location.href = `./report.html?id=${encodeURIComponent(id)}`;
+      } else if (act === "del") {
+        if (!confirm("确认删除这条历史记录？")) return;
+        const items = loadHistory().filter((x, idx) => (x.id || `legacy_${idx}`) !== id);
+        saveHistory(items);
+        render();
+      }
+    });
+
+    clearAllBtn.addEventListener("click", () => {
+      if (!confirm("将清空所有历史记录，确认继续？")) return;
+      saveHistory([]);
+      render();
+    });
+
+    render();
   </script>
 </body>
 </html>

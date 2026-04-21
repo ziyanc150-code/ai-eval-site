@@ -52,6 +52,19 @@
     }
     .err { color: #b91c1c; font-size: 0.85rem; }
     .subtle { color: #6b7280; font-size: 0.85rem; }
+    .meta-list { margin: 0; padding: 0; list-style: none; }
+    .meta-list li { padding: 4px 0; border-bottom: 1px dashed #e5e7eb; font-size: 0.9rem; }
+    .meta-list li:last-child { border-bottom: none; }
+    .meta-list .label { display: inline-block; width: 100px; color: #6b7280; }
+    .dim-card {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-top: 6px;
+    }
+    .dim-card strong { color: #111827; }
+    .dim-card .criteria { color: #374151; font-size: 0.88rem; margin-top: 2px; }
     details.raw { margin-top: 16px; }
     details.raw pre { background: #f3f4f6; padding: 10px; border-radius: 6px; }
     .row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -61,6 +74,7 @@
 <body>
   <main class="container">
     <h1>本次评测报告</h1>
+    <div class="card" id="metaCard"></div>
     <div class="card" id="summaryCard"></div>
     <div id="itemsContainer"></div>
 
@@ -81,10 +95,48 @@
   <script>
     window.Auth.requireAuth("/index.html");
 
-    const raw = localStorage.getItem("latest_eval_report") || "{}";
-    const report = JSON.parse(raw);
+    function loadReport() {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get("id");
+      if (id) {
+        const hist = JSON.parse(localStorage.getItem("eval_history") || "[]");
+        const hit = hist.find((x) => x.id === id);
+        if (hit && hit.report) return hit.report;
+      }
+      return JSON.parse(localStorage.getItem("latest_eval_report") || "{}");
+    }
+    const report = loadReport();
     const rawEl = document.getElementById("reportJson");
     rawEl.textContent = JSON.stringify(report, null, 2);
+
+    function formatTime(iso) {
+      if (!iso) return "";
+      try {
+        const d = new Date(iso);
+        return d.toLocaleString();
+      } catch (_e) { return iso; }
+    }
+
+    function renderMeta() {
+      const card = document.getElementById("metaCard");
+      const dims = report.dimensions || [];
+      const dimBlocks = dims.length
+        ? dims.map((d) => `<div class="dim-card"><strong>${escapeHtml(d.name)}</strong><div class="criteria">${escapeHtml(d.criteria || "（未填写评分标准）")}</div></div>`).join("")
+        : `<span class="subtle">（未记录维度信息）</span>`;
+      card.innerHTML = `
+        <h2 style="margin:0 0 8px; font-size:1.05rem;">本次评测信息</h2>
+        <ul class="meta-list">
+          <li><span class="label">评测时间</span>${escapeHtml(formatTime(report.created_at))}</li>
+          <li><span class="label">任务类型</span>${escapeHtml(report.task_type || "—")}</li>
+          <li><span class="label">模型名称</span>${escapeHtml(report.model_name || "—")}</li>
+          <li><span class="label">运行 ID</span><code>${escapeHtml(report.run_id || "—")}</code></li>
+        </ul>
+        <div style="margin-top:10px;">
+          <div class="subtle" style="margin-bottom:4px;">评测维度与评分标准：</div>
+          ${dimBlocks}
+        </div>
+      `;
+    }
 
     function scoreClass(s) {
       if (s === null || s === undefined || Number.isNaN(Number(s))) return "missing";
@@ -197,6 +249,7 @@
       URL.revokeObjectURL(url);
     });
 
+    renderMeta();
     renderSummary();
     renderItems();
   </script>
