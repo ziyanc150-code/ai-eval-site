@@ -8,6 +8,9 @@ const addDimensionBtn = document.getElementById("addDimensionBtn");
 const runEvalBtn = document.getElementById("runEvalBtn");
 const statusText = document.getElementById("statusText");
 const dataFileEl = document.getElementById("dataFile");
+const mediaFilesEl = document.getElementById("mediaFiles");
+const videoFrameCountEl = document.getElementById("videoFrameCount");
+const mediaPreviewEl = document.getElementById("mediaPreview");
 
 const apiEndpointEl = document.getElementById("apiEndpoint");
 const apiKeyEl = document.getElementById("apiKey");
@@ -195,6 +198,174 @@ async function readDataFile(file) {
   return Array.isArray(data) ? data : [data];
 }
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error(`读取文件失败：${file.name}`));
+    r.readAsDataURL(file);
+  });
+}
+
+function detectMediaType(file) {
+  const t = (file.type || "").toLowerCase();
+  if (t.startsWith("video")) return "video";
+  if (t.startsWith("image")) return "image";
+  const lower = file.name.toLowerCase();
+  if (/\.(mp4|webm|mov|mkv|avi|m4v)$/.test(lower)) return "video";
+  if (/\.(png|jpe?g|gif|webp|bmp|avif|heic)$/.test(lower)) return "image";
+  return null;
+}
+
+async function extractVideoFrames(file, count) {
+  const n = Math.max(0, Math.min(16, Number(count) || 0));
+  if (!n) return [];
+  const url = URL.createObjectURL(file);
+  try {
+    const video = document.createElement("video");
+    video.preload = "auto";
+    video.muted = true;
+    video.playsInline = true;
+    video.src = url;
+    await new Promise((res, rej) => {
+      video.onloadedmetadata = () => res();
+      video.onerror = () => rej(new Error(`无法加载视频：${file.name}`));
+    });
+    const duration = Number(video.duration) || 0;
+    if (!duration || !isFinite(duration)) return [];
+    const maxWidth = 512;
+    const vw = video.videoWidth || maxWidth;
+    const vh = video.videoHeight || Math.round(maxWidth * 9 / 16);
+    const scale = Math.min(1, maxWidth / vw);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(vw * scale));
+    canvas.height = Math.max(1, Math.round(vh * scale));
+    const ctx = canvas.getContext("2d");
+    const frames = [];
+    for (let i = 0; i < n; i += 1) {
+      const t = Math.min(duration - 0.05, (duration * (i + 0.5)) / n);
+      await new Promise((res, rej) => {
+        video.onseeked = () => res();
+        video.onerror = () => rej(new Error(`视频抽帧失败：${file.name}`));
+        video.currentTime = Math.max(0, t);
+      });
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      frames.push(canvas.toDataURL("image/jpeg", 0.8));
+    }
+    return frames;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function processMediaFiles(files, frameCount) {
+  const entries = [];
+  const map = new Map();
+  for (const f of files) {
+    const type = detectMediaType(f);
+    if (!type) continue;
+    const dataUrl = await fileToDataUrl(f);
+    const entry = { name: f.name, size: f.size, type, dataUrl };
+    if (type === "video") {
+      try {
+        entry.frames = await extractVideoFrames(f, frameCount);
+      } catch (err) {
+        entry.frame_error = err.message;
+        entry.frames = [];
+      }
+    }
+    entries.push(entry);
+    const base = f.name.replace(/\.[^.]+$/, "");
+    if (!map.has(f.name)) map.set(f.name, entry);
+    if (!map.has(base)) map.set(base, entry);
+  }
+  return { entries, map };
+}
+
+function renderMediaPreview(entries) {
+  if (!mediaPreviewEl) return;
+  mediaPreviewEl.innerHTML = "";
+  if (!entries.length) return;
+  const totalBytes = entries.reduce((s, e) => s + (e.size || 0), 0);
+  const info = document.createElement("div");
+  info.className = "media-preview-info";
+  info.textContent = `共 ${entries.length} 个媒体文件，合计约 ${(totalBytes / 1024 / 1024).toFixed(2)} MB`;
+  mediaPreviewEl.appendChild(info);
+
+  const grid = document.createElement("div");
+  grid.className = "media-preview-grid";
+  entries.slice(0, 12).forEach((e) => {
+    const cell = document.createElement("div");
+    cell.className = "media-preview-cell";
+    let thumb;
+    if (e.type === "image") {
+      thumb = document.createElement("img");
+      thumb.src = e.dataUrl;
+      thumb.alt = e.name;
+    } else {
+      thumb = document.createElement("video");
+      thumb.src = e.dataUrl;
+      thumb.muted = true;
+      thumb.playsInline = true;
+      thumb.controls = true;
+    }
+    const caption = document.createElement("div");
+    caption.className = "media-preview-caption";
+    const frameTip = e.type === "video" ? `（抽帧 ${e.frames ? e.frames.length : 0} 张）` : "";
+    caption.textContent = `${e.name} ${frameTip}`;
+    cell.appendChild(thumb);
+    cell.appendChild(caption);
+    grid.appendChild(cell);
+  });
+  mediaPreviewEl.appendChild(grid);
+  if (entries.length > 12) {
+    const more = document.createElement("div");
+    more.className = "media-preview-info";
+    more.textContent = `…另有 ${entries.length - 12} 个文件未预览。`;
+    mediaPreviewEl.appendChild(more);
+  }
+}
+
+function mediaEntriesToItems(entries) {
+  return entries.map((e, idx) => {
+    const item = { id: e.name, input_text: e.name.replace(/\.[^.]+$/, "") };
+    if (e.type === "image") {
+      item.image_url = e.dataUrl;
+    } else {
+      item.video_url = e.dataUrl;
+      if (e.frames && e.frames.length) item.frame_urls = e.frames;
+    }
+    if (!item.id) item.id = `media_${idx + 1}`;
+    return item;
+  });
+}
+
+function mergeItemsWithMedia(items, mediaMap) {
+  if (!mediaMap || !mediaMap.size) return items;
+  return items.map((it, idx) => {
+    const out = { ...it };
+    const candidates = [it.file, it.media_file, it.filename, it.video_file, it.image_file, it.id]
+      .filter(Boolean)
+      .map((x) => String(x).trim());
+    let matched = null;
+    for (const key of candidates) {
+      if (mediaMap.has(key)) { matched = mediaMap.get(key); break; }
+      const base = key.replace(/\.[^.]+$/, "");
+      if (mediaMap.has(base)) { matched = mediaMap.get(base); break; }
+    }
+    if (!matched) return out;
+    if (matched.type === "image" && !out.image_url) out.image_url = matched.dataUrl;
+    if (matched.type === "video") {
+      if (!out.video_url) out.video_url = matched.dataUrl;
+      if (matched.frames && matched.frames.length && !out.frame_urls) {
+        out.frame_urls = matched.frames;
+      }
+    }
+    if (!out.id) out.id = matched.name;
+    return out;
+  });
+}
+
 function persistHistory(meta) {
   const key = "eval_history";
   const oldData = JSON.parse(localStorage.getItem(key) || "[]");
@@ -238,6 +409,25 @@ taskTypeEl.addEventListener("change", () => {
   setStatus("已切换任务类型模板。");
 });
 
+if (mediaFilesEl) {
+  mediaFilesEl.addEventListener("change", async () => {
+    try {
+      const files = [...(mediaFilesEl.files || [])];
+      if (!files.length) {
+        renderMediaPreview([]);
+        return;
+      }
+      setStatus(`读取媒体文件中（${files.length} 个）...`);
+      const frameCount = Number(videoFrameCountEl?.value || 0);
+      const { entries } = await processMediaFiles(files, frameCount);
+      renderMediaPreview(entries);
+      setStatus(`媒体文件已载入：${entries.length} 个。`);
+    } catch (err) {
+      setStatus(`读取媒体失败：${err.message}`);
+    }
+  });
+}
+
 logoutBtn.addEventListener("click", (e) => {
   e.preventDefault();
   authUtils.clearAccessKey();
@@ -259,6 +449,8 @@ runEvalBtn.addEventListener("click", async () => {
     const accessKey = authUtils.getAccessKey();
     const dimensions = getDimensionsFromUI();
     const file = dataFileEl.files?.[0];
+    const mediaFiles = [...(mediaFilesEl?.files || [])];
+    const frameCount = Number(videoFrameCountEl?.value || 0);
 
     if (!accessKey) {
       setStatus("登录已失效，请重新登录。");
@@ -277,8 +469,8 @@ runEvalBtn.addEventListener("click", async () => {
       setStatus("请填写模型名称。");
       return;
     }
-    if (!file) {
-      setStatus("请上传数据文件。");
+    if (!file && !mediaFiles.length) {
+      setStatus("请至少上传「结构化数据文件」或「媒体文件」其中之一。");
       return;
     }
     if (!dimensions.length) {
@@ -286,11 +478,30 @@ runEvalBtn.addEventListener("click", async () => {
       return;
     }
 
-    setStatus("读取数据中...");
-    const items = await readDataFile(file);
-    if (!items.length) {
-      setStatus("数据文件为空或没有有效行。");
-      return;
+    let items = [];
+    let mediaResult = { entries: [], map: new Map() };
+    if (mediaFiles.length) {
+      setStatus(`读取媒体文件 0/${mediaFiles.length}（抽帧：${frameCount}）...`);
+      mediaResult = await processMediaFiles(mediaFiles, frameCount);
+      renderMediaPreview(mediaResult.entries);
+    }
+
+    if (file) {
+      setStatus("读取数据文件...");
+      items = await readDataFile(file);
+      if (!items.length) {
+        setStatus("数据文件为空或没有有效行。");
+        return;
+      }
+      if (mediaResult.map.size) {
+        items = mergeItemsWithMedia(items, mediaResult.map);
+      }
+    } else {
+      items = mediaEntriesToItems(mediaResult.entries);
+      if (!items.length) {
+        setStatus("未识别到任何可用的图片/视频文件。");
+        return;
+      }
     }
 
     const results = [];
