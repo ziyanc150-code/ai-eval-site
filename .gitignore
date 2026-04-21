@@ -1,2 +1,8 @@
 js/config.local.js
 APIkey.rtf
+
+*.docx
+*.doc
+*.rtf
+*.pdf
+新建*
