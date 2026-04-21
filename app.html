@@ -71,8 +71,8 @@
         <input id="mediaFiles" type="file" accept="image/*,video/*,.zip,application/zip" multiple />
       </label>
 
-      <label>视频抽取关键帧数量（0 = 不抽帧；仅对视频生效）
-        <input id="videoFrameCount" type="number" min="0" max="16" value="0" />
+      <label>视频抽取关键帧数量（推荐 6–8；0 = 不抽帧，大多数网关不支持原生视频会导致模型看不到内容）
+        <input id="videoFrameCount" type="number" min="0" max="16" value="6" />
       </label>
 
       <div id="mediaPreview" class="media-preview"></div>

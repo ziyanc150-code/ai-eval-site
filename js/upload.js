@@ -756,6 +756,19 @@ runEvalBtn.addEventListener("click", async () => {
       mediaFiles = m;
     }
 
+    const hasVideo = mediaFiles.some((f) => detectMediaType(f) === "video");
+    let effectiveFrameCount = frameCount;
+    if (hasVideo && frameCount === 0) {
+      effectiveFrameCount = 6;
+      if (videoFrameCountEl) videoFrameCountEl.value = "6";
+      const msg = "检测到你上传了视频但「视频抽取关键帧数量」为 0。\n\n大多数 OpenAI 兼容网关（如 Aihubmix / OpenAI / 通义 / Qwen-VL 等）只支持 image_url，不支持原生 video_url；直接发视频通常会被静默忽略，模型就会反问你要视频。\n\n已自动改为 6（把视频抽成 6 张关键帧发给模型），点击确定继续评测。\n如果你的网关确实原生支持 video_url，想保留 0，请在弹窗后先点取消，再手动把数值改回 0 并取消勾选关键帧逻辑（不推荐）。";
+      const ok = confirm(msg);
+      if (!ok) {
+        effectiveFrameCount = 0;
+        if (videoFrameCountEl) videoFrameCountEl.value = "0";
+      }
+    }
+
     if (!accessKey) {
       setStatus("登录已失效，请重新登录。");
       window.location.href = "/index.html";
@@ -785,8 +798,8 @@ runEvalBtn.addEventListener("click", async () => {
     let items = [];
     let mediaResult = { entries: [], map: new Map() };
     if (mediaFiles.length) {
-      setStatus(`读取媒体文件 0/${mediaFiles.length}（抽帧：${frameCount}）...`);
-      mediaResult = await processMediaFiles(mediaFiles, frameCount);
+      setStatus(`读取媒体文件 0/${mediaFiles.length}（抽帧：${effectiveFrameCount}）...`);
+      mediaResult = await processMediaFiles(mediaFiles, effectiveFrameCount);
       renderMediaPreview(mediaResult.entries);
     }
 

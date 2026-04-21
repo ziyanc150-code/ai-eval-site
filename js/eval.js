@@ -106,12 +106,33 @@ async function evaluateOne({
   const { textItem, media } = splitItemMedia(item);
   const dimsText = buildDimensionsText(dimensions);
   const primary = dimensions[0] || {};
-  const prompt = String(promptTemplate || "")
+  const rawTemplate = String(promptTemplate || "");
+  const hasItemPlaceholder = /{{\s*(item|prompt|input|sample|input_text)\s*}}/i.test(rawTemplate);
+
+  let prompt = rawTemplate
     .replaceAll("{{task_type}}", taskType || "")
     .replaceAll("{{dimensions}}", dimsText)
     .replaceAll("{{dimension_name}}", primary.name || "")
     .replaceAll("{{criteria}}", primary.criteria || "")
     .replaceAll("{{item}}", JSON.stringify(textItem, null, 2));
+
+  if (!hasItemPlaceholder) {
+    const textFields = Object.entries(textItem || {}).filter(([, v]) => v != null && String(v).trim() !== "");
+    const sampleBlock = textFields.length
+      ? textFields.map(([k, v]) => `【${k}】\n${typeof v === "string" ? v : JSON.stringify(v)}`).join("\n\n")
+      : "（本样本无文字字段）";
+    const imgs = media.filter((m) => m.type === "image_url").length;
+    const vids = media.filter((m) => m.type === "video_url").length;
+    const auds = media.filter((m) => m.type === "audio_url").length;
+    const parts = [];
+    if (imgs) parts.push(`${imgs} 张图片 / 关键帧`);
+    if (vids) parts.push(`${vids} 段视频`);
+    if (auds) parts.push(`${auds} 段音频`);
+    const mediaHint = parts.length
+      ? `本样本同时附带：${parts.join("、")}（已随本次请求以多模态形式直接发送，请基于它们评估，不要反问、不要要求"请提供"）。`
+      : "本样本仅含文字字段，不含额外媒体。";
+    prompt = `${prompt}\n\n----\n【待评测样本】\n${sampleBlock}\n\n${mediaHint}\n\n【输出要求】必须仅返回如下 JSON（不要任何多余文字、不要 markdown 围栏、不要反问）：\n{\n  "scores": { "${primary.name || "维度名"}": 0 },\n  "comment": "一句话总体评价",\n  "problems": "针对该维度的具体问题点"\n}`;
+  }
 
   const payload = {
     model: String(modelName).trim(),
