@@ -24,7 +24,6 @@ function getDefaultDimensions() {
 }
 
 async function evaluateOne({
-  accessKey,
   apiEndpoint,
   apiKey,
   modelName,
@@ -33,6 +32,15 @@ async function evaluateOne({
   dimensions,
   item
 }) {
+  const endpoint = String(apiEndpoint || "").trim();
+  const key = String(apiKey || "").trim();
+  if (!endpoint || !key) {
+    throw new Error("请填写「评测 API Endpoint」和「API Key」（本站不代付模型费用）。");
+  }
+  if (!String(modelName || "").trim()) {
+    throw new Error("请填写模型名称。");
+  }
+
   const dimsText = buildDimensionsText(dimensions);
   const prompt = promptTemplate
     .replaceAll("{{task_type}}", taskType)
@@ -47,25 +55,14 @@ async function evaluateOne({
     input: item
   };
 
-  const ownEndpoint = String(apiEndpoint || "").trim();
-  const headers = { "Content-Type": "application/json" };
-
-  let res;
-  if (ownEndpoint) {
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    res = await fetch(ownEndpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload)
-    });
-  } else {
-    headers["x-access-key"] = accessKey;
-    res = await fetch("/api/eval", {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload)
-    });
-  }
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`
+    },
+    body: JSON.stringify(payload)
+  });
 
   if (!res.ok) {
     const text = await res.text();

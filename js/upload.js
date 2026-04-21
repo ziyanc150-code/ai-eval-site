@@ -208,8 +208,16 @@ runEvalBtn.addEventListener("click", async () => {
       window.location.href = "/index.html";
       return;
     }
-    if (apiEndpoint && !modelName) {
-      setStatus("使用自有 API 时，请填写模型名称。");
+    if (!apiEndpoint) {
+      setStatus("请填写评测 API Endpoint（本站不代付，必须直连你的 API）。");
+      return;
+    }
+    if (!apiKey) {
+      setStatus("请填写 API Key（本站不代付，必须使用你自己的密钥）。");
+      return;
+    }
+    if (!modelName) {
+      setStatus("请填写模型名称。");
       return;
     }
     if (!promptTemplate || !file) {
@@ -228,7 +236,6 @@ runEvalBtn.addEventListener("click", async () => {
     for (let i = 0; i < items.length; i += 1) {
       setStatus(`评测进行中 ${i + 1}/${items.length}...`);
       const scoreJson = await evaluateOne({
-        accessKey,
         apiEndpoint,
         apiKey,
         modelName,
@@ -246,7 +253,7 @@ runEvalBtn.addEventListener("click", async () => {
     const report = aggregateReport(results, dimensions);
     const record = {
       task_type: taskType,
-      model_name: modelName || "(default)",
+      model_name: modelName,
       prompt_template: promptTemplate,
       dimensions,
       raw_results: results,

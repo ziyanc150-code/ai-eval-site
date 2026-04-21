@@ -5,19 +5,19 @@
 - `index.html`：登录页（访问密钥）
 - `app.html`：评测主页面
 - `functions/api/validate-key.js`：校验密钥
-- `functions/api/eval.js`：服务端代调用模型 API（前端不暴露模型 Key）
+- `functions/api/eval.js`：**已关闭**站內模型代理（固定返回 403），避免站長代付 API 費用；評測一律由前端直連使用者自有 Endpoint
 - `functions/api/health.js`：自检接口 `GET /api/health`（查看 `kv_bound` 等）
 - `key-admin.html`：网页密钥管理页（增删 key）
 
-## 评测 API 两种用法（`app.html`）
+## 评测 API（`app.html`，唯一方式）
 
-1. **自有 API（BYOK）**：填写「评测 API Endpoint」与「API Key」，请求由**浏览器直连**你的网关；需自行处理 **CORS** 允许当前站点 origin。适合公开站点、每人自带密钥。
-2. **本站代理**：将 Endpoint **留空**，请求走 `POST /api/eval`，由 Cloudflare 使用环境变量 `MODEL_API_ENDPOINT` / `MODEL_API_KEY`（不在页面展示）。
+- **必填**：「评测 API Endpoint」「API Key」「模型名称」
+- 请求由**浏览器直连**你的网关；需自行配置 **CORS** 允许当前站点 origin
+- **不存在**「留空走本站代理」：本站不代付模型费用，`/api/eval` 已禁用
 
 ## 关键安全设计
 
-- 平台托管模式：模型 Key 仅存储在 Cloudflare 环境变量（`MODEL_API_KEY`）
-- BYOK 模式：用户密钥仅在浏览器会话中使用，**勿**把他人密钥写入仓库
+- 用户模型 Key 仅在浏览器会话中使用，**勿**把他人密钥写入仓库
 - 登录密钥存储在 Cloudflare KV（`ACCESS_KEYS`）
 - 删除 KV 中某个密钥后，该密钥立即失效
 - 同一密钥支持多设备登录（无设备绑定）
@@ -48,10 +48,9 @@ KV 的 key/value 建议：
 
 在 Pages 项目设置中添加：
 
-- `MODEL_API_ENDPOINT`：你的模型评测 API 地址
-- `MODEL_API_KEY`：你的平台模型 Key（Secret）
-- `MODEL_NAME`：默认模型名（可选）
-- `ADMIN_TOKEN`：密钥管理页使用的管理员令牌（必填，建议高强度随机串）
+- `ADMIN_TOKEN`：密钥管理页使用的管理员令牌（Secret，必填，建议高强度随机串）
+
+（已不再使用 `MODEL_API_ENDPOINT` / `MODEL_API_KEY` 做代付；可從專案中移除以免誤解。）
 
 ## 网页管理密钥（已实现）
 
@@ -71,9 +70,7 @@ KV 的 key/value 建议：
 
 1. 用户在 `index.html` 输入访问密钥
 2. 前端请求 `/api/validate-key` 验证
-3. 登录后在 `app.html`：
-   - **填了 Endpoint**：浏览器 `POST` 到用户 Endpoint（可选 `Authorization: Bearer`）
-   - **未填 Endpoint**：浏览器 `POST` 到 `/api/eval`，Functions 校验 `x-access-key` 后用 `MODEL_API_*` 代调
+3. 登录后在 `app.html` 填写 Endpoint、API Key、模型名 → 浏览器 **直连** 用户 API 完成评测
 4. 返回 JSON 分数并生成报告
 
 ## 本地启动
