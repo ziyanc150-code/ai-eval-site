@@ -180,14 +180,19 @@ async function evaluateOne({
 
 function aggregateReport(results, dimensions) {
   const scoreSums = Object.fromEntries(dimensions.map((d) => [d.name, 0]));
+  const scoreCounts = Object.fromEntries(dimensions.map((d) => [d.name, 0]));
   let total = 0;
   let count = 0;
 
   for (const x of results) {
     const scores = x?.scores || {};
     for (const d of dimensions) {
-      const v = Number(scores[d.name] ?? 0);
+      const raw = scores[d.name];
+      if (raw === null || raw === undefined || raw === "") continue;
+      const v = Number(raw);
+      if (!Number.isFinite(v)) continue;
       scoreSums[d.name] += v;
+      scoreCounts[d.name] += 1;
       total += v;
       count += 1;
     }
@@ -195,14 +200,16 @@ function aggregateReport(results, dimensions) {
 
   const avgByDimension = {};
   dimensions.forEach((d) => {
-    avgByDimension[d.name] = results.length ? Number((scoreSums[d.name] / results.length).toFixed(2)) : 0;
+    const n = scoreCounts[d.name];
+    avgByDimension[d.name] = n ? Number((scoreSums[d.name] / n).toFixed(2)) : null;
   });
 
-  const avgScore = count ? Number((total / count).toFixed(2)) : 0;
+  const avgScore = count ? Number((total / count).toFixed(2)) : null;
   return {
     total_items: results.length,
     avg_score: avgScore,
     avg_by_dimension: avgByDimension,
+    dimensions: dimensions.map((d) => ({ name: d.name, criteria: d.criteria })),
     items: results
   };
 }

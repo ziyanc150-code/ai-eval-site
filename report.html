@@ -5,34 +5,200 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>评测报告</title>
   <link rel="stylesheet" href="./css/style.css" />
+  <style>
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .summary-cell {
+      background: #f3f4f6;
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .summary-cell .k { font-size: 0.78rem; color: #6b7280; }
+    .summary-cell .v { font-size: 1.25rem; font-weight: 600; color: #111827; }
+    .summary-cell .v.bad { color: #dc2626; }
+    .summary-cell .v.low { color: #d97706; }
+    .summary-cell .v.ok { color: #059669; }
+
+    table.eval-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    table.eval-table th, table.eval-table td {
+      border: 1px solid #e5e7eb;
+      padding: 8px 10px;
+      vertical-align: top;
+      text-align: left;
+    }
+    table.eval-table th {
+      background: #f9fafb;
+      font-weight: 600;
+      width: 140px;
+    }
+    table.eval-table td.score { width: 72px; text-align: center; font-weight: 600; }
+    .score.bad { color: #dc2626; background: #fee2e2; }
+    .score.low { color: #d97706; background: #fef3c7; }
+    .score.ok { color: #059669; background: #d1fae5; }
+    .score.missing { color: #6b7280; background: #f3f4f6; font-style: italic; }
+    .item-title {
+      font-weight: 600;
+      color: #111827;
+      margin-bottom: 6px;
+      word-break: break-all;
+    }
+    .err { color: #b91c1c; font-size: 0.85rem; }
+    .subtle { color: #6b7280; font-size: 0.85rem; }
+    details.raw { margin-top: 16px; }
+    details.raw pre { background: #f3f4f6; padding: 10px; border-radius: 6px; }
+    .row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .row-actions button { width: auto; }
+  </style>
 </head>
 <body>
   <main class="container">
     <h1>本次评测报告</h1>
+    <div class="card" id="summaryCard"></div>
+    <div id="itemsContainer"></div>
+
     <div class="card">
-      <pre id="reportJson"></pre>
-      <button id="downloadBtn" type="button">下载 JSON 报告</button>
+      <div class="row-actions">
+        <button id="downloadJsonBtn" type="button">下载 JSON 报告</button>
+        <button id="downloadCsvBtn" type="button">下载 CSV（按维度展开）</button>
+        <a href="./app.html" style="align-self:center;">回评测页</a>
+      </div>
+      <details class="raw">
+        <summary class="subtle">查看原始 JSON</summary>
+        <pre id="reportJson"></pre>
+      </details>
     </div>
-    <a href="./app.html">回评测页</a>
   </main>
 
   <script src="./js/auth.js"></script>
   <script>
     window.Auth.requireAuth("/index.html");
-    const reportEl = document.getElementById("reportJson");
-    const downloadBtn = document.getElementById("downloadBtn");
-    const raw = localStorage.getItem("latest_eval_report") || "{}";
-    reportEl.textContent = JSON.stringify(JSON.parse(raw), null, 2);
 
-    downloadBtn.addEventListener("click", () => {
-      const blob = new Blob([reportEl.textContent], { type: "application/json" });
+    const raw = localStorage.getItem("latest_eval_report") || "{}";
+    const report = JSON.parse(raw);
+    const rawEl = document.getElementById("reportJson");
+    rawEl.textContent = JSON.stringify(report, null, 2);
+
+    function scoreClass(s) {
+      if (s === null || s === undefined || Number.isNaN(Number(s))) return "missing";
+      const n = Number(s);
+      if (n <= 3) return "bad";
+      if (n <= 6) return "low";
+      return "ok";
+    }
+    function formatScore(s) {
+      if (s === null || s === undefined || s === "") return "—";
+      return String(s);
+    }
+
+    function renderSummary() {
+      const card = document.getElementById("summaryCard");
+      const dims = report.dimensions || [];
+      const avgByDim = report.avg_by_dimension || {};
+      const total = report.total_items ?? 0;
+      const overall = report.avg_score;
+      const overallClass = scoreClass(overall);
+      const dimCells = dims.map((d) => {
+        const v = avgByDim[d.name];
+        const cls = scoreClass(v);
+        return `<div class="summary-cell"><div class="k">${d.name}</div><div class="v ${cls}">${formatScore(v)}</div></div>`;
+      }).join("");
+      card.innerHTML = `
+        <div class="summary-grid">
+          <div class="summary-cell"><div class="k">样本数</div><div class="v">${total}</div></div>
+          <div class="summary-cell"><div class="k">综合平均</div><div class="v ${overallClass}">${formatScore(overall)}</div></div>
+          ${dimCells}
+        </div>
+        <p class="subtle">分数说明：<span class="score bad">0–3</span> 严重问题　<span class="score low">4–6</span> 存在缺陷　<span class="score ok">7–10</span> 表现良好　「—」表示模型没有返回该维度分数（通常是没看到媒体 / 返回格式异常）。</p>
+      `;
+    }
+
+    function renderItems() {
+      const container = document.getElementById("itemsContainer");
+      const items = report.items || [];
+      if (!items.length) {
+        container.innerHTML = `<div class="card"><p class="subtle">没有评测结果。</p></div>`;
+        return;
+      }
+      container.innerHTML = items.map((it, idx) => {
+        const rows = (it.dimensions || []).map((d) => {
+          const s = d.score;
+          const cls = scoreClass(s);
+          const err = d.error ? `<div class="err">请求出错：${d.error}</div>` : "";
+          const problems = d.problems || (s === null ? "（模型未返回分数，可能未看到媒体或回包非 JSON）" : "—");
+          const comment = d.comment || "";
+          return `
+            <tr>
+              <th>${d.dimension}<div class="subtle">${d.criteria || ""}</div></th>
+              <td class="score ${cls}">${formatScore(s)}</td>
+              <td>
+                <div><strong>问题点：</strong>${escapeHtml(problems)}</div>
+                ${comment ? `<div class="subtle" style="margin-top:4px;"><strong>总评：</strong>${escapeHtml(comment)}</div>` : ""}
+                ${err}
+              </td>
+            </tr>`;
+        }).join("");
+        return `
+          <div class="card">
+            <div class="item-title">#${idx + 1}　${it.input_id || ""}</div>
+            <table class="eval-table">
+              <thead><tr><th>维度</th><th class="score">分数</th><th>问题 / 总评</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function escapeHtml(s) {
+      return String(s || "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+    }
+
+    function buildCsv() {
+      const dims = (report.dimensions || []).map((d) => d.name);
+      const headers = ["input_id", ...dims.flatMap((d) => [`${d}_score`, `${d}_problems`])];
+      const lines = [headers.join(",")];
+      for (const it of (report.items || [])) {
+        const cells = [it.input_id || ""];
+        const dimMap = {};
+        (it.dimensions || []).forEach((d) => { dimMap[d.dimension] = d; });
+        for (const name of dims) {
+          const d = dimMap[name];
+          cells.push(d && d.score !== null && d.score !== undefined ? String(d.score) : "");
+          cells.push(d?.problems || "");
+        }
+        lines.push(cells.map(csvEscape).join(","));
+      }
+      return "\uFEFF" + lines.join("\n");
+    }
+    function csvEscape(s) {
+      const v = String(s ?? "");
+      if (/[",\n]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
+      return v;
+    }
+
+    document.getElementById("downloadJsonBtn").addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "eval-report.json";
-      a.click();
+      const a = document.createElement("a"); a.href = url; a.download = "eval-report.json"; a.click();
       URL.revokeObjectURL(url);
     });
+    document.getElementById("downloadCsvBtn").addEventListener("click", () => {
+      const blob = new Blob([buildCsv()], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = "eval-report.csv"; a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    renderSummary();
+    renderItems();
   </script>
 </body>
 </html>

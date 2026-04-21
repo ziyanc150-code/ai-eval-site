@@ -20,20 +20,27 @@ const logoutBtn = document.getElementById("logoutBtn");
 
 /** 新建维度行时的默认提示词骨架（占位符由 eval.js 在请求前替换） */
 function buildDefaultDimensionPrompt() {
-  return `你是专业评测员。请仅针对下列维度打分（0-10），不要评价其他维度。
+  return `你是严格、专业的评测员。请仅针对下列一个维度打分，不要评价其他维度。
 
 维度名称：{{dimension_name}}
 评分标准：{{criteria}}
 
-输入样本：
+输入样本（文字字段）：
 {{item}}
 
-仅返回 JSON：
+上述样本可能同时附带图片 / 视频 / 关键帧，已随本次请求以多模态形式传给你。
+请基于这些多模态内容进行评估。如果你看不到媒体，请在 comment 里明确写「未收到媒体」并将 score 设为 null。
+
+打分要求：
+- score 必须是 0 到 10 之间的「整数」；0 代表严重不合格，10 代表完美符合；不要返回区间字符串。
+- problems 必须具体说明：发现的问题、缺陷点、与评分标准的差距；若几乎没问题也要写「无明显问题，细节：...」。
+- 不要空字符串，不要省略字段。
+
+严格返回以下 JSON（不要任何多余文字、不要 markdown 代码围栏）：
 {
-  "scores": {
-    "{{dimension_name}}": 0-10 的数值
-  },
-  "comment": "针对该维度的简要说明"
+  "scores": { "{{dimension_name}}": 0 },
+  "comment": "一句话总体评价",
+  "problems": "针对该维度的具体问题点，条列或句子均可"
 }`;
 }
 
@@ -613,30 +620,45 @@ runEvalBtn.addEventListener("click", async () => {
 
     for (let i = 0; i < items.length; i += 1) {
       const mergedScores = {};
-      const comments = [];
+      const dimensionDetails = [];
       for (let j = 0; j < dimensions.length; j += 1) {
         const dim = dimensions[j];
         doneCalls += 1;
         setStatus(`评测进行中 ${doneCalls}/${totalCalls}（第 ${i + 1}/${items.length} 条 · 维度「${dim.name}」）...`);
-        const scoreJson = await evaluateOne({
-          apiEndpoint,
-          apiKey,
-          modelName,
-          taskType,
-          promptTemplate: dim.prompt,
-          dimensions: [dim],
-          item: items[i]
-        });
-        const sc = scoreJson.scores && typeof scoreJson.scores === "object" ? scoreJson.scores : {};
-        Object.assign(mergedScores, sc);
-        if (scoreJson.comment) {
-          comments.push(`${dim.name}：${scoreJson.comment}`);
+        let scoreJson = {};
+        let callError = null;
+        try {
+          scoreJson = await evaluateOne({
+            apiEndpoint,
+            apiKey,
+            modelName,
+            taskType,
+            promptTemplate: dim.prompt,
+            dimensions: [dim],
+            item: items[i]
+          });
+        } catch (err) {
+          callError = err.message;
         }
+        const sc = scoreJson && scoreJson.scores && typeof scoreJson.scores === "object" ? scoreJson.scores : {};
+        const dimScoreRaw = sc[dim.name];
+        const dimScore = dimScoreRaw === null || dimScoreRaw === undefined || dimScoreRaw === ""
+          ? null
+          : Number(dimScoreRaw);
+        if (dimScore !== null && !Number.isNaN(dimScore)) mergedScores[dim.name] = dimScore;
+        dimensionDetails.push({
+          dimension: dim.name,
+          criteria: dim.criteria,
+          score: Number.isFinite(dimScore) ? dimScore : null,
+          comment: scoreJson?.comment || "",
+          problems: scoreJson?.problems || "",
+          error: callError
+        });
       }
       results.push({
         input_id: items[i].id ?? `item_${i + 1}`,
         scores: mergedScores,
-        comment: comments.join("\n")
+        dimensions: dimensionDetails
       });
     }
 
