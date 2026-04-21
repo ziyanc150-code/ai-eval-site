@@ -80,3 +80,10 @@ npx serve .
 
 推送到 GitHub 后，Cloudflare Pages 会自动部署并得到 `https://xxx.pages.dev` 永久地址。
 
+## 重要：为什么必须有 `404.html`
+
+Cloudflare Pages 在**没有**顶层 `404.html` 时，会把站点当成 **SPA**：大量未匹配路径会被回退到根目录的 `index.html`。  
+这会导致你访问 `/api/health` 也看到登录页（误以为接口坏了）。
+
+本项目已包含 `404.html` 来关闭该行为，让 `/api/*` 能正常命中 Pages Functions。
+
