@@ -1,4 +1,3 @@
-const auth = window.Auth;
 const adminTokenEl = document.getElementById("adminToken");
 const newKeyEl = document.getElementById("newKey");
 const loadKeysBtn = document.getElementById("loadKeysBtn");
@@ -125,4 +124,3 @@ addKeyBtn.addEventListener("click", async () => {
   await loadKeys();
 });
 
-auth.requireAuth("/index.html");
