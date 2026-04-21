@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>评测报告</title>
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>本次评测报告</h1>
+    <div class="card">
+      <pre id="reportJson"></pre>
+      <button id="downloadBtn" type="button">下载 JSON 报告</button>
+    </div>
+    <a href="./index.html">回首页</a>
+  </main>
+
+  <script type="module">
+    const reportEl = document.getElementById("reportJson");
+    const downloadBtn = document.getElementById("downloadBtn");
+    const raw = localStorage.getItem("latest_eval_report") || "{}";
+    reportEl.textContent = JSON.stringify(JSON.parse(raw), null, 2);
+
+    downloadBtn.addEventListener("click", () => {
+      const blob = new Blob([reportEl.textContent], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "eval-report.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  </script>
+</body>
+</html>

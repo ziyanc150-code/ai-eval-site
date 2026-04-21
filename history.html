@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>历史评测记录</title>
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>历史评测记录</h1>
+    <div id="historyList" class="card"></div>
+    <a href="./index.html">回首页</a>
+  </main>
+
+  <script type="module">
+    const listEl = document.getElementById("historyList");
+    const items = JSON.parse(localStorage.getItem("eval_history") || "[]");
+
+    if (!items.length) {
+      listEl.textContent = "目前没有历史数据。";
+    } else {
+      const ul = document.createElement("ul");
+      items.forEach((x) => {
+        const li = document.createElement("li");
+        li.textContent = `${x.created_at} | ${x.task_type} | ${x.model_name} | 平均分: ${x.avg_score}`;
+        ul.appendChild(li);
+      });
+      listEl.appendChild(ul);
+    }
+  </script>
+</body>
+</html>
