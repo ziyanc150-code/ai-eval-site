@@ -9,6 +9,8 @@ const runEvalBtn = document.getElementById("runEvalBtn");
 const statusText = document.getElementById("statusText");
 const dataFileEl = document.getElementById("dataFile");
 
+const apiEndpointEl = document.getElementById("apiEndpoint");
+const apiKeyEl = document.getElementById("apiKey");
 const modelNameEl = document.getElementById("modelName");
 const taskTypeEl = document.getElementById("taskType");
 const promptTemplateEl = document.getElementById("promptTemplate");
@@ -158,6 +160,8 @@ function init() {
   }
   authUtils.requireAuth("/index.html");
   const appConfig = window.APP_CONFIG || {};
+  if (appConfig.apiEndpoint) apiEndpointEl.value = appConfig.apiEndpoint;
+  if (appConfig.apiKey) apiKeyEl.value = appConfig.apiKey;
   if (appConfig.modelName) modelNameEl.value = appConfig.modelName;
   loadTaskTemplate(taskTypeEl.value);
 }
@@ -190,6 +194,8 @@ runEvalBtn.addEventListener("click", async () => {
       setStatus("脚本尚未准备完成，请刷新页面后重试。");
       return;
     }
+    const apiEndpoint = apiEndpointEl.value.trim();
+    const apiKey = apiKeyEl.value.trim();
     const modelName = modelNameEl.value.trim();
     const taskType = taskTypeEl.value;
     const accessKey = authUtils.getAccessKey();
@@ -200,6 +206,10 @@ runEvalBtn.addEventListener("click", async () => {
     if (!accessKey) {
       setStatus("登录已失效，请重新登录。");
       window.location.href = "/index.html";
+      return;
+    }
+    if (apiEndpoint && !modelName) {
+      setStatus("使用自有 API 时，请填写模型名称。");
       return;
     }
     if (!promptTemplate || !file) {
@@ -219,6 +229,8 @@ runEvalBtn.addEventListener("click", async () => {
       setStatus(`评测进行中 ${i + 1}/${items.length}...`);
       const scoreJson = await evaluateOne({
         accessKey,
+        apiEndpoint,
+        apiKey,
         modelName,
         taskType,
         promptTemplate,
@@ -234,7 +246,7 @@ runEvalBtn.addEventListener("click", async () => {
     const report = aggregateReport(results, dimensions);
     const record = {
       task_type: taskType,
-      model_name: modelName,
+      model_name: modelName || "(default)",
       prompt_template: promptTemplate,
       dimensions,
       raw_results: results,

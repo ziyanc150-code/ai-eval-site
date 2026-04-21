@@ -9,12 +9,22 @@
 <body>
   <main class="container">
     <h1>多模态 AI 自动化评测平台</h1>
-    <p>上传数据文件后，系统会通过安全后端调用模型 API，避免前端泄露你的平台密钥。</p>
+    <p>
+      上传数据文件后进行批量评测。你可使用<strong>自己的模型 API</strong>（在下方填写 Endpoint 与 Key，请求由浏览器直接发出）；
+      也可将「评测 API Endpoint」留空，改用本站 Cloudflare 后端代理（需管理员配置 <code>MODEL_API_*</code>，不在此页显示平台密钥）。
+    </p>
+    <p class="hint">若使用自有 API：请确保该 API 已配置 <strong>CORS</strong> 允许当前站点来源（浏览器地址栏的 origin），否则请求会被跨域策略拦截。</p>
 
     <section class="card">
       <h2>1) 基本设置</h2>
+      <label>评测 API Endpoint（留空则走本站代理 /api/eval）
+        <input id="apiEndpoint" type="text" placeholder="https://api.openai.com/v1/chat/completions 或你的评测网关" />
+      </label>
+      <label>API Key（自有 API 时填写；走本站代理时可留空）
+        <input id="apiKey" type="password" placeholder="sk-... 或留空" />
+      </label>
       <label>模型名称（可覆盖默认模型）
-        <input id="modelName" type="text" placeholder="留空则使用 Cloudflare 环境变量 MODEL_NAME" />
+        <input id="modelName" type="text" placeholder="自有 API 时通常必填；走本站代理可留空用环境变量 MODEL_NAME" />
       </label>
       <label>任务类型
         <select id="taskType">

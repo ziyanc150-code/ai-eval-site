@@ -9,10 +9,15 @@
 - `functions/api/health.js`：自检接口 `GET /api/health`（查看 `kv_bound` 等）
 - `key-admin.html`：网页密钥管理页（增删 key）
 
+## 评测 API 两种用法（`app.html`）
+
+1. **自有 API（BYOK）**：填写「评测 API Endpoint」与「API Key」，请求由**浏览器直连**你的网关；需自行处理 **CORS** 允许当前站点 origin。适合公开站点、每人自带密钥。
+2. **本站代理**：将 Endpoint **留空**，请求走 `POST /api/eval`，由 Cloudflare 使用环境变量 `MODEL_API_ENDPOINT` / `MODEL_API_KEY`（不在页面展示）。
+
 ## 关键安全设计
 
-- 前端不会保存平台模型 Key
-- 模型 Key 仅存储在 Cloudflare 环境变量（`MODEL_API_KEY`）
+- 平台托管模式：模型 Key 仅存储在 Cloudflare 环境变量（`MODEL_API_KEY`）
+- BYOK 模式：用户密钥仅在浏览器会话中使用，**勿**把他人密钥写入仓库
 - 登录密钥存储在 Cloudflare KV（`ACCESS_KEYS`）
 - 删除 KV 中某个密钥后，该密钥立即失效
 - 同一密钥支持多设备登录（无设备绑定）
@@ -66,9 +71,10 @@ KV 的 key/value 建议：
 
 1. 用户在 `index.html` 输入访问密钥
 2. 前端请求 `/api/validate-key` 验证
-3. 登录后前端调用 `/api/eval`
-4. Cloudflare Functions 验证密钥 + 用服务端 `MODEL_API_KEY` 调模型
-5. 返回 JSON 分数给前端展示
+3. 登录后在 `app.html`：
+   - **填了 Endpoint**：浏览器 `POST` 到用户 Endpoint（可选 `Authorization: Bearer`）
+   - **未填 Endpoint**：浏览器 `POST` 到 `/api/eval`，Functions 校验 `x-access-key` 后用 `MODEL_API_*` 代调
+4. 返回 JSON 分数并生成报告
 
 ## 本地启动
 
