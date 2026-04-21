@@ -10,10 +10,12 @@
   <main class="container">
     <h1>历史评测记录</h1>
     <div id="historyList" class="card"></div>
-    <a href="./index.html">回首页</a>
+    <a href="./app.html">回评测页</a>
   </main>
 
-  <script type="module">
+  <script src="./js/auth.js"></script>
+  <script>
+    window.Auth.requireAuth("/index.html");
     const listEl = document.getElementById("historyList");
     const items = JSON.parse(localStorage.getItem("eval_history") || "[]");
 

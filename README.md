@@ -1,99 +1,65 @@
-# 多模態 AI 自動化評測網站
+# 多模态 AI 自动化评测网站（公开安全版）
 
-此專案提供一個可直接部署的前端評測工具，支援：
+本项目已改成公开可发布版本：
 
-- 文本評測
-- 文生圖評測
-- 文生視頻評測
-- 圖生視頻評測
+- `index.html`：登录页（访问密钥）
+- `app.html`：评测主页面
+- `functions/api/validate-key.js`：校验密钥
+- `functions/api/eval.js`：服务端代调用模型 API（前端不暴露模型 Key）
 
-核心流程：
+## 关键安全设计
 
-1. 使用者上傳 JSON/JSONL 資料檔
-2. 前端組裝提示詞與評分維度
-3. 呼叫你的多模態 API 取得 JSON 分數
-4. 可選寫入 Supabase
-5. 產出報告 JSON（`report.html`）
+- 前端不会保存平台模型 Key
+- 模型 Key 仅存储在 Cloudflare 环境变量（`MODEL_API_KEY`）
+- 登录密钥存储在 Cloudflare KV（`ACCESS_KEYS`）
+- 删除 KV 中某个密钥后，该密钥立即失效
+- 同一密钥支持多设备登录（无设备绑定）
 
-## 專案結構
+## 登录规则（已实现）
 
-```text
-.
-├── index.html
-├── report.html
-├── history.html
-├── js/
-│   ├── upload.js
-│   ├── eval.js
-│   └── supabase.js
-└── css/
-    └── style.css
-```
+- 不填密钥：按钮灰色不可点击，显示“请填写密钥”
+- 填对密钥：可登录并进入 `app.html`
+- 填错密钥：拦截评测功能，显示“输入错误”
 
-## API 契約（你要提供的評測服務）
+## Cloudflare Pages 必配项
 
-前端會 `POST` 到你填入的 API Endpoint，payload 形如：
+### 1) 绑定 KV（多密钥管理）
 
-```json
-{
-  "model": "your-model-name",
-  "task_type": "text | text_to_image | text_to_video | image_to_video",
-  "prompt": "完整評測提示詞",
-  "dimensions": [{ "name": "相關性", "criteria": "..." }],
-  "input": { "id": "sample-1", "input_text": "...", "output_text": "..." }
-}
-```
+在 Pages 项目设置中添加 KV 绑定：
 
-API 回應需為 JSON，至少包含：
+- 变量名：`ACCESS_KEYS`
+- 指向你的 KV namespace
 
-```json
-{
-  "scores": {
-    "相關性": 8,
-    "正確性": 7
-  },
-  "comment": "簡短評語"
-}
-```
+KV 的 key/value 建议：
 
-## Supabase 設定（可選）
+- Key：`key:你的密钥`（例如 `key:teamA_2026_001`）
+- Value：`1`
 
-前端目前從 `localStorage` 讀取：
+你可添加多个 key；删除某个 key 即失效。
 
-- `supabase_url`
-- `supabase_anon_key`
-- `supabase_table`（預設 `eval_results`）
+### 2) 设置环境变量（服务端）
 
-你可在瀏覽器 Console 先設定：
+在 Pages 项目设置中添加：
 
-```js
-localStorage.setItem("supabase_url", "https://YOUR_PROJECT.supabase.co");
-localStorage.setItem("supabase_anon_key", "YOUR_ANON_KEY");
-localStorage.setItem("supabase_table", "eval_results");
-```
+- `MODEL_API_ENDPOINT`：你的模型评测 API 地址
+- `MODEL_API_KEY`：你的平台模型 Key（Secret）
+- `MODEL_NAME`：默认模型名（可选）
 
-建議資料表欄位：
+## 评测请求流
 
-- `id` (uuid, pk)
-- `task_type` (text)
-- `model_name` (text)
-- `prompt_template` (text)
-- `dimensions` (jsonb)
-- `raw_results` (jsonb)
-- `avg_score` (numeric)
-- `created_at` (timestamptz)
+1. 用户在 `index.html` 输入访问密钥
+2. 前端请求 `/api/validate-key` 验证
+3. 登录后前端调用 `/api/eval`
+4. Cloudflare Functions 验证密钥 + 用服务端 `MODEL_API_KEY` 调模型
+5. 返回 JSON 分数给前端展示
 
-## 本機啟動
-
-可用任意靜態伺服器，例如：
+## 本地启动
 
 ```bash
 npx serve .
 ```
 
-## 雲端部署
+## 上线
 
-- Vercel / Netlify / Cloudflare Pages：直接部署靜態站點
-- API 服務可獨立部署在雲端函式或後端服務
-- Supabase 作為結果儲存層
+推送到 GitHub 后，Cloudflare Pages 会自动部署并得到 `https://xxx.pages.dev` 永久地址。
 

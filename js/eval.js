@@ -24,8 +24,7 @@ function getDefaultDimensions() {
 }
 
 async function evaluateOne({
-  apiEndpoint,
-  apiKey,
+  accessKey,
   modelName,
   taskType,
   promptTemplate,
@@ -46,10 +45,12 @@ async function evaluateOne({
     input: item
   };
 
-  const headers = { "Content-Type": "application/json" };
-  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  const headers = {
+    "Content-Type": "application/json",
+    "x-access-key": accessKey
+  };
 
-  const res = await fetch(apiEndpoint, {
+  const res = await fetch("/api/eval", {
     method: "POST",
     headers,
     body: JSON.stringify(payload)

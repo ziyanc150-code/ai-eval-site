@@ -13,10 +13,12 @@
       <pre id="reportJson"></pre>
       <button id="downloadBtn" type="button">下载 JSON 报告</button>
     </div>
-    <a href="./index.html">回首页</a>
+    <a href="./app.html">回评测页</a>
   </main>
 
-  <script type="module">
+  <script src="./js/auth.js"></script>
+  <script>
+    window.Auth.requireAuth("/index.html");
     const reportEl = document.getElementById("reportJson");
     const downloadBtn = document.getElementById("downloadBtn");
     const raw = localStorage.getItem("latest_eval_report") || "{}";

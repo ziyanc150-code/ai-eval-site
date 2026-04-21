@@ -1,5 +1,6 @@
 const evalUtils = window.EvalUtils;
 const supabaseUtils = window.SupabaseUtils;
+const authUtils = window.Auth;
 
 const dimensionsEl = document.getElementById("dimensions");
 const loadTemplateBtn = document.getElementById("loadTemplateBtn");
@@ -8,11 +9,10 @@ const runEvalBtn = document.getElementById("runEvalBtn");
 const statusText = document.getElementById("statusText");
 const dataFileEl = document.getElementById("dataFile");
 
-const apiEndpointEl = document.getElementById("apiEndpoint");
-const apiKeyEl = document.getElementById("apiKey");
 const modelNameEl = document.getElementById("modelName");
 const taskTypeEl = document.getElementById("taskType");
 const promptTemplateEl = document.getElementById("promptTemplate");
+const logoutBtn = document.getElementById("logoutBtn");
 
 const COMMON_PROMPT_SUFFIX = `
 
@@ -152,13 +152,12 @@ function loadTaskTemplate(taskType) {
 }
 
 function init() {
-  if (!evalUtils || !supabaseUtils) {
+  if (!evalUtils || !supabaseUtils || !authUtils) {
     setStatus("脚本加载失败，请使用 http://127.0.0.1:5500/index.html 打开，并刷新页面。");
     return;
   }
+  authUtils.requireAuth("/index.html");
   const appConfig = window.APP_CONFIG || {};
-  if (appConfig.apiKey) apiKeyEl.value = appConfig.apiKey;
-  if (appConfig.apiEndpoint) apiEndpointEl.value = appConfig.apiEndpoint;
   if (appConfig.modelName) modelNameEl.value = appConfig.modelName;
   loadTaskTemplate(taskTypeEl.value);
 }
@@ -177,6 +176,12 @@ taskTypeEl.addEventListener("change", () => {
   setStatus("已切换任务类型模板。");
 });
 
+logoutBtn.addEventListener("click", (e) => {
+  e.preventDefault();
+  authUtils.clearAccessKey();
+  window.location.href = "/index.html";
+});
+
 runEvalBtn.addEventListener("click", async () => {
   try {
     const { evaluateOne, aggregateReport } = evalUtils || {};
@@ -185,16 +190,20 @@ runEvalBtn.addEventListener("click", async () => {
       setStatus("脚本尚未准备完成，请刷新页面后重试。");
       return;
     }
-    const apiEndpoint = apiEndpointEl.value.trim();
     const modelName = modelNameEl.value.trim();
     const taskType = taskTypeEl.value;
-    const apiKey = apiKeyEl.value.trim();
+    const accessKey = authUtils.getAccessKey();
     const promptTemplate = promptTemplateEl.value.trim();
     const dimensions = getDimensionsFromUI();
     const file = dataFileEl.files?.[0];
 
-    if (!apiEndpoint || !modelName || !promptTemplate || !file) {
-      setStatus("请先填写 API Endpoint、模型名称、提示词，并上传数据文件。");
+    if (!accessKey) {
+      setStatus("登录已失效，请重新登录。");
+      window.location.href = "/index.html";
+      return;
+    }
+    if (!promptTemplate || !file) {
+      setStatus("请先填写提示词并上传数据文件。");
       return;
     }
     if (!dimensions.length) {
@@ -209,8 +218,7 @@ runEvalBtn.addEventListener("click", async () => {
     for (let i = 0; i < items.length; i += 1) {
       setStatus(`评测进行中 ${i + 1}/${items.length}...`);
       const scoreJson = await evaluateOne({
-        apiEndpoint,
-        apiKey,
+        accessKey,
         modelName,
         taskType,
         promptTemplate,

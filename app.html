@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>多模态 AI 自动化评测</title>
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>多模态 AI 自动化评测平台</h1>
+    <p>上传数据文件后，系统会通过安全后端调用模型 API，避免前端泄露你的平台密钥。</p>
+
+    <section class="card">
+      <h2>1) 基本设置</h2>
+      <label>模型名称（可覆盖默认模型）
+        <input id="modelName" type="text" placeholder="留空则使用 Cloudflare 环境变量 MODEL_NAME" />
+      </label>
+      <label>任务类型
+        <select id="taskType">
+          <option value="text">文本评测</option>
+          <option value="text_to_image">文生图评测</option>
+          <option value="text_to_video">文生视频评测</option>
+          <option value="image_to_video">图生视频评测</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>2) 评测模板与自定义维度</h2>
+      <div class="row">
+        <button id="addDimensionBtn" type="button">新增评分维度</button>
+        <button id="loadTemplateBtn" type="button">加载基础模板</button>
+      </div>
+      <div id="dimensions"></div>
+    </section>
+
+    <section class="card">
+      <h2>3) 评测提示词（可在线自定义）</h2>
+      <textarea id="promptTemplate" rows="8" placeholder="你是专业评测员，请按照以下维度返回 JSON 分数..."></textarea>
+    </section>
+
+    <section class="card">
+      <h2>4) 上传数据</h2>
+      <p>支持 JSON/JSONL，字段可包含：id、input_text、output_text、image_url、video_url、frame_urls。</p>
+      <input id="dataFile" type="file" accept=".json,.jsonl" />
+      <button id="runEvalBtn" type="button">开始评测</button>
+      <p id="statusText"></p>
+    </section>
+
+    <section class="card">
+      <h2>快速入口</h2>
+      <a href="./report.html">查看本次报告</a>
+      <a href="./history.html">查看历史记录</a>
+      <a id="logoutBtn" href="#">退出登录</a>
+    </section>
+  </main>
+
+  <script src="./js/auth.js"></script>
+  <script src="./js/eval.js"></script>
+  <script src="./js/supabase.js"></script>
+  <script src="./js/upload.js"></script>
+</body>
+</html>
