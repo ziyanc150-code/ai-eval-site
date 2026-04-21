@@ -9,7 +9,7 @@
 <body>
   <main class="container">
     <h1>访问密钥管理</h1>
-    <p>本页用于新增/删除可登录密钥。删除后即时失效。</p>
+    <p>本页用于新增/删除可登录密钥。删除后即时失效。注意：ADMIN_TOKEN 仅用于管理，不可用于登录评测页。</p>
 
     <section class="card">
       <h2>管理员验证</h2>
@@ -25,7 +25,10 @@
       <label>新密钥
         <input id="newKey" type="text" placeholder="例如 teamA_2026_001" />
       </label>
-      <button id="addKeyBtn" type="button">新增密钥</button>
+      <div class="row">
+        <button id="genKeyBtn" type="button">一键生成密钥</button>
+        <button id="addKeyBtn" type="button">新增密钥</button>
+      </div>
     </section>
 
     <section class="card">

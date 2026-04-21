@@ -3,6 +3,7 @@ const adminTokenEl = document.getElementById("adminToken");
 const newKeyEl = document.getElementById("newKey");
 const loadKeysBtn = document.getElementById("loadKeysBtn");
 const addKeyBtn = document.getElementById("addKeyBtn");
+const genKeyBtn = document.getElementById("genKeyBtn");
 const keysListEl = document.getElementById("keysList");
 const statusText = document.getElementById("statusText");
 
@@ -12,6 +13,15 @@ function setStatus(msg) {
 
 function getAdminToken() {
   return adminTokenEl.value.trim();
+}
+
+function generateAccessKey() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  let suffix = "";
+  for (let i = 0; i < 24; i += 1) {
+    suffix += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return `ak_${suffix}`;
 }
 
 function renderKeys(keys) {
@@ -80,6 +90,11 @@ async function loadKeys() {
 
 loadKeysBtn.addEventListener("click", async () => {
   await loadKeys();
+});
+
+genKeyBtn.addEventListener("click", () => {
+  newKeyEl.value = generateAccessKey();
+  setStatus("已生成新密钥，请点击“新增密钥”保存。");
 });
 
 addKeyBtn.addEventListener("click", async () => {
