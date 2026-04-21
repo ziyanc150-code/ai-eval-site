@@ -6,6 +6,7 @@
 - `app.html`：评测主页面
 - `functions/api/validate-key.js`：校验密钥
 - `functions/api/eval.js`：服务端代调用模型 API（前端不暴露模型 Key）
+- `functions/api/health.js`：自检接口 `GET /api/health`（查看 `kv_bound` 等）
 - `key-admin.html`：网页密钥管理页（增删 key）
 
 ## 关键安全设计
