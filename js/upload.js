@@ -566,6 +566,32 @@ function saveFormDraft() {
   } catch (_e) { /* ignore quota errors */ }
 }
 
+let _draftSaveTimer = null;
+function scheduleSaveFormDraft() {
+  if (_draftSaveTimer) clearTimeout(_draftSaveTimer);
+  _draftSaveTimer = setTimeout(saveFormDraft, 400);
+}
+
+function setupDraftAutosave() {
+  const topFields = [apiEndpointEl, apiKeyEl, modelNameEl, taskTypeEl, videoFrameCountEl].filter(Boolean);
+  topFields.forEach((el) => {
+    el.addEventListener("input", scheduleSaveFormDraft);
+    el.addEventListener("change", scheduleSaveFormDraft);
+  });
+  if (dimensionsEl) {
+    dimensionsEl.addEventListener("input", scheduleSaveFormDraft);
+    dimensionsEl.addEventListener("change", scheduleSaveFormDraft);
+    dimensionsEl.addEventListener("click", (e) => {
+      if (e.target && e.target.classList && e.target.classList.contains("remove-dim")) {
+        scheduleSaveFormDraft();
+      }
+    });
+  }
+  window.addEventListener("beforeunload", () => {
+    try { saveFormDraft(); } catch (_e) {}
+  });
+}
+
 function applyFormDraft(draft) {
   if (!draft || typeof draft !== "object") return false;
   if (apiEndpointEl && draft.api_endpoint) apiEndpointEl.value = draft.api_endpoint;
@@ -589,12 +615,19 @@ function tryRestoreFormDraft() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("restore") !== "1") return false;
     const raw = localStorage.getItem(FORM_DRAFT_KEY);
-    if (!raw) return false;
+    if (!raw) {
+      setStatus("没有找到可恢复的草稿（可能是首次使用、清过浏览器缓存，或用了不同浏览器 / 无痕模式）。请手动填入配置后开始评测，之后返回即可自动恢复。");
+      history.replaceState({}, "", window.location.pathname);
+      return false;
+    }
     const draft = JSON.parse(raw);
     const ok = applyFormDraft(draft);
+    history.replaceState({}, "", window.location.pathname);
     if (ok) {
-      setStatus("已恢复上次评测的配置（维度 / 提示词 / 基本设置）。媒体文件请重新选择，然后点击“开始评测”。");
-      history.replaceState({}, "", window.location.pathname);
+      const savedAt = draft.saved_at ? new Date(draft.saved_at).toLocaleString() : "";
+      setStatus(`已恢复上次评测的配置（${savedAt ? `保存于 ${savedAt}，` : ""}维度 / 提示词 / 基本设置）。媒体文件请重新选择，然后点击"开始评测"。`);
+    } else {
+      setStatus("找到草稿但内容为空，已忽略。请手动填写后开始评测。");
     }
     return ok;
   } catch (_e) {
@@ -633,21 +666,28 @@ function init() {
   if (appConfig.apiKey) apiKeyEl.value = appConfig.apiKey;
   if (appConfig.modelName) modelNameEl.value = appConfig.modelName;
   loadTaskTemplate(taskTypeEl.value);
-  tryRestoreFormDraft();
+  const restored = tryRestoreFormDraft();
+  if (!restored) {
+    saveFormDraft();
+  }
+  setupDraftAutosave();
 }
 
 loadTemplateBtn.addEventListener("click", () => {
   loadTaskTemplate(taskTypeEl.value);
   setStatus("已加载当前任务类型的基础评分模板。");
+  scheduleSaveFormDraft();
 });
 
 addDimensionBtn.addEventListener("click", () => {
   createDimensionRow("", "", buildDefaultDimensionPrompt());
+  scheduleSaveFormDraft();
 });
 
 taskTypeEl.addEventListener("change", () => {
   loadTaskTemplate(taskTypeEl.value);
   setStatus("已切换任务类型模板。");
+  scheduleSaveFormDraft();
 });
 
 if (mediaFilesEl) {
@@ -695,6 +735,7 @@ runEvalBtn.addEventListener("click", async () => {
       setStatus("脚本尚未准备完成，请刷新页面后重试。");
       return;
     }
+    saveFormDraft();
     const apiEndpoint = apiEndpointEl.value.trim();
     const apiKey = apiKeyEl.value.trim();
     const modelName = modelNameEl.value.trim();
