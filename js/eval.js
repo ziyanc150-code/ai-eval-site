@@ -42,9 +42,12 @@ async function evaluateOne({
   }
 
   const dimsText = buildDimensionsText(dimensions);
-  const prompt = promptTemplate
+  const primary = dimensions[0] || {};
+  const prompt = String(promptTemplate || "")
     .replaceAll("{{task_type}}", taskType)
     .replaceAll("{{dimensions}}", dimsText)
+    .replaceAll("{{dimension_name}}", primary.name || "")
+    .replaceAll("{{criteria}}", primary.criteria || "")
     .replaceAll("{{item}}", JSON.stringify(item, null, 2));
 
   const payload = {

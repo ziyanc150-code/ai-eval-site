@@ -37,6 +37,7 @@
 
     <section class="card">
       <h2>2) 评测模板与自定义维度</h2>
+      <p class="hint">每个维度需填写<strong>独立评测提示词</strong>；提示词中可使用占位符 <code>{{item}}</code>（当前样本 JSON）、<code>{{dimension_name}}</code>、<code>{{criteria}}</code>、<code>{{task_type}}</code>、<code>{{dimensions}}</code>（当前维度一行说明）。模型需按该维度返回 <code>scores</code> 中含对应维度名的分数。</p>
       <div class="row">
         <button id="addDimensionBtn" type="button">新增评分维度</button>
         <button id="loadTemplateBtn" type="button">加载基础模板</button>
@@ -45,14 +46,9 @@
     </section>
 
     <section class="card">
-      <h2>3) 评测提示词（可在线自定义）</h2>
-      <textarea id="promptTemplate" rows="8" placeholder="你是专业评测员，请按照以下维度返回 JSON 分数..."></textarea>
-    </section>
-
-    <section class="card">
-      <h2>4) 上传数据</h2>
-      <p>支持 JSON/JSONL，字段可包含：id、input_text、output_text、image_url、video_url、frame_urls。</p>
-      <input id="dataFile" type="file" accept=".json,.jsonl" />
+      <h2>3) 上传数据</h2>
+      <p>支持 <strong>JSON / JSONL / XLSX</strong>（Excel 第一行为表头）。字段可包含：id、input_text、output_text、image_url、video_url、frame_urls。</p>
+      <input id="dataFile" type="file" accept=".json,.jsonl,.xlsx,.xls" />
       <button id="runEvalBtn" type="button">开始评测</button>
       <p id="statusText"></p>
     </section>
@@ -66,6 +62,7 @@
     </section>
   </main>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="./js/auth.js"></script>
   <script src="./js/eval.js"></script>
   <script src="./js/supabase.js"></script>

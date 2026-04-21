@@ -13,10 +13,14 @@ const apiEndpointEl = document.getElementById("apiEndpoint");
 const apiKeyEl = document.getElementById("apiKey");
 const modelNameEl = document.getElementById("modelName");
 const taskTypeEl = document.getElementById("taskType");
-const promptTemplateEl = document.getElementById("promptTemplate");
 const logoutBtn = document.getElementById("logoutBtn");
 
-const COMMON_PROMPT_SUFFIX = `
+/** 新建维度行时的默认提示词骨架（占位符由 eval.js 在请求前替换） */
+function buildDefaultDimensionPrompt() {
+  return `你是专业评测员。请仅针对下列维度打分（0-10），不要评价其他维度。
+
+维度名称：{{dimension_name}}
+评分标准：{{criteria}}
 
 输入样本：
 {{item}}
@@ -24,16 +28,14 @@ const COMMON_PROMPT_SUFFIX = `
 仅返回 JSON：
 {
   "scores": {
-    "维度名称1": 0-10
+    "{{dimension_name}}": 0-10 的数值
   },
-  "comment": "总评与主要问题"
+  "comment": "针对该维度的简要说明"
 }`;
+}
 
 const TASK_PRESETS = {
   text_to_video: {
-    prompt: `你是一位专业文生视频评测员。请严格按评分维度逐项打分（0-10）。
-评分维度：
-{{dimensions}}${COMMON_PROMPT_SUFFIX}`,
     dimensions: [
       { name: "视觉质量", criteria: "清晰度/分辨率稳定性；噪点、伪影、闪烁；色彩准确性与一致性；曝光与对比度" },
       { name: "时序一致性", criteria: "帧间连贯性；物体ID一致性；光影连续性；背景稳定性" },
@@ -48,9 +50,6 @@ const TASK_PRESETS = {
     ]
   },
   image_to_video: {
-    prompt: `你是一位专业图生视频评测员。请严格按评分维度逐项打分（0-10）。
-评分维度：
-{{dimensions}}${COMMON_PROMPT_SUFFIX}`,
     dimensions: [
       { name: "首帧一致性", criteria: "首帧与输入图像像素/结构相似度（PSNR、SSIM、LPIPS）" },
       { name: "主体一致性", criteria: "主体身份、外观、细节跨帧保持（DINO/CLIP特征相似度）" },
@@ -62,9 +61,6 @@ const TASK_PRESETS = {
     ]
   },
   text_to_image: {
-    prompt: `你是一位专业文生图评测员。请严格按评分维度逐项打分（0-10）。
-评分维度：
-{{dimensions}}${COMMON_PROMPT_SUFFIX}`,
     dimensions: [
       { name: "图文一致性", criteria: "对象存在性、属性绑定、数量准确、空间关系（2D/3D）" },
       { name: "图像质量", criteria: "结构合理性、分辨率与锐度、光影一致性、纹理真实性" },
@@ -75,9 +71,6 @@ const TASK_PRESETS = {
     ]
   },
   text: {
-    prompt: `你是一位专业文本评测员。请严格按评分维度逐项打分（0-10）。
-评分维度：
-{{dimensions}}${COMMON_PROMPT_SUFFIX}`,
     dimensions: [
       { name: "任务准确性", criteria: "知识问答、阅读理解、推理、代码、摘要、翻译、信息抽取/结构化、分类情感等准确性" },
       { name: "生成质量", criteria: "流畅性、连贯性、信息量、相关性、简洁性、风格一致性" },
@@ -101,15 +94,53 @@ function setStatus(msg) {
   statusText.textContent = msg;
 }
 
-function createDimensionRow(name = "", criteria = "") {
+function createDimensionRow(name = "", criteria = "", prompt = "") {
   const row = document.createElement("div");
   row.className = "dimension-row";
-  row.innerHTML = `
-    <input class="dim-name" type="text" placeholder="维度名称" value="${name}" />
-    <input class="dim-criteria" type="text" placeholder="评分标准（0-10）" value="${criteria}" />
-    <button type="button" class="remove-dim">删除</button>
-  `;
-  row.querySelector(".remove-dim").addEventListener("click", () => row.remove());
+
+  const fields = document.createElement("div");
+  fields.className = "dim-fields";
+
+  const labName = document.createElement("label");
+  labName.textContent = "维度名称";
+  const inpName = document.createElement("input");
+  inpName.className = "dim-name";
+  inpName.type = "text";
+  inpName.placeholder = "维度名称";
+  inpName.value = name;
+  labName.appendChild(inpName);
+
+  const labCrit = document.createElement("label");
+  labCrit.textContent = "评分标准";
+  const inpCrit = document.createElement("input");
+  inpCrit.className = "dim-criteria";
+  inpCrit.type = "text";
+  inpCrit.placeholder = "评分标准（0-10）";
+  inpCrit.value = criteria;
+  labCrit.appendChild(inpCrit);
+
+  const rm = document.createElement("button");
+  rm.type = "button";
+  rm.className = "remove-dim";
+  rm.textContent = "删除";
+  rm.addEventListener("click", () => row.remove());
+
+  fields.appendChild(labName);
+  fields.appendChild(labCrit);
+  fields.appendChild(rm);
+
+  const labPrompt = document.createElement("label");
+  labPrompt.className = "dim-prompt-label";
+  labPrompt.appendChild(document.createTextNode("该维度的评测提示词"));
+  const ta = document.createElement("textarea");
+  ta.className = "dim-prompt";
+  ta.rows = 4;
+  ta.placeholder = "可使用 {{item}}、{{dimension_name}}、{{criteria}} 等占位符";
+  ta.value = prompt && String(prompt).trim() ? prompt : buildDefaultDimensionPrompt();
+  labPrompt.appendChild(ta);
+
+  row.appendChild(fields);
+  row.appendChild(labPrompt);
   dimensionsEl.appendChild(row);
 }
 
@@ -119,9 +150,10 @@ function getDimensionsFromUI() {
     .map((row) => {
       const name = row.querySelector(".dim-name").value.trim();
       const criteria = row.querySelector(".dim-criteria").value.trim();
-      return { name, criteria };
+      const prompt = row.querySelector(".dim-prompt").value.trim();
+      return { name, criteria, prompt };
     })
-    .filter((x) => x.name && x.criteria);
+    .filter((x) => x.name && x.prompt);
 }
 
 function parseJsonl(text) {
@@ -132,7 +164,31 @@ function parseJsonl(text) {
     .map((line) => JSON.parse(line));
 }
 
+function readXlsxFile(file) {
+  if (typeof XLSX === "undefined") {
+    throw new Error("未加载表格解析库，请检查网络能否访问 cdnjs 上的 xlsx，或刷新页面重试。");
+  }
+  return file.arrayBuffer().then((buf) => {
+    const wb = XLSX.read(buf, { type: "array" });
+    const sheetName = wb.SheetNames[0];
+    if (!sheetName) return [];
+    const sheet = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    return rows.map((row) => {
+      const out = {};
+      Object.keys(row).forEach((k) => {
+        out[String(k).trim()] = row[k];
+      });
+      return out;
+    });
+  });
+}
+
 async function readDataFile(file) {
+  const lower = file.name.toLowerCase();
+  if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) {
+    return readXlsxFile(file);
+  }
   const text = await file.text();
   if (file.name.endsWith(".jsonl")) return parseJsonl(text);
   const data = JSON.parse(text);
@@ -149,8 +205,10 @@ function persistHistory(meta) {
 function loadTaskTemplate(taskType) {
   const preset = getTaskPreset(taskType);
   dimensionsEl.innerHTML = "";
-  preset.dimensions.forEach((d) => createDimensionRow(d.name, d.criteria));
-  promptTemplateEl.value = preset.prompt;
+  preset.dimensions.forEach((d) => {
+    const p = d.prompt && String(d.prompt).trim() ? d.prompt : buildDefaultDimensionPrompt();
+    createDimensionRow(d.name, d.criteria, p);
+  });
 }
 
 function init() {
@@ -172,7 +230,7 @@ loadTemplateBtn.addEventListener("click", () => {
 });
 
 addDimensionBtn.addEventListener("click", () => {
-  createDimensionRow();
+  createDimensionRow("", "", buildDefaultDimensionPrompt());
 });
 
 taskTypeEl.addEventListener("change", () => {
@@ -199,7 +257,6 @@ runEvalBtn.addEventListener("click", async () => {
     const modelName = modelNameEl.value.trim();
     const taskType = taskTypeEl.value;
     const accessKey = authUtils.getAccessKey();
-    const promptTemplate = promptTemplateEl.value.trim();
     const dimensions = getDimensionsFromUI();
     const file = dataFileEl.files?.[0];
 
@@ -220,33 +277,52 @@ runEvalBtn.addEventListener("click", async () => {
       setStatus("请填写模型名称。");
       return;
     }
-    if (!promptTemplate || !file) {
-      setStatus("请先填写提示词并上传数据文件。");
+    if (!file) {
+      setStatus("请上传数据文件。");
       return;
     }
     if (!dimensions.length) {
-      setStatus("请至少设置一个评分维度。");
+      setStatus("请至少设置一个评分维度，且每个维度需填写名称与评测提示词。");
       return;
     }
 
     setStatus("读取数据中...");
     const items = await readDataFile(file);
+    if (!items.length) {
+      setStatus("数据文件为空或没有有效行。");
+      return;
+    }
+
     const results = [];
+    const totalCalls = items.length * dimensions.length;
+    let doneCalls = 0;
 
     for (let i = 0; i < items.length; i += 1) {
-      setStatus(`评测进行中 ${i + 1}/${items.length}...`);
-      const scoreJson = await evaluateOne({
-        apiEndpoint,
-        apiKey,
-        modelName,
-        taskType,
-        promptTemplate,
-        dimensions,
-        item: items[i]
-      });
+      const mergedScores = {};
+      const comments = [];
+      for (let j = 0; j < dimensions.length; j += 1) {
+        const dim = dimensions[j];
+        doneCalls += 1;
+        setStatus(`评测进行中 ${doneCalls}/${totalCalls}（第 ${i + 1}/${items.length} 条 · 维度「${dim.name}」）...`);
+        const scoreJson = await evaluateOne({
+          apiEndpoint,
+          apiKey,
+          modelName,
+          taskType,
+          promptTemplate: dim.prompt,
+          dimensions: [dim],
+          item: items[i]
+        });
+        const sc = scoreJson.scores && typeof scoreJson.scores === "object" ? scoreJson.scores : {};
+        Object.assign(mergedScores, sc);
+        if (scoreJson.comment) {
+          comments.push(`${dim.name}：${scoreJson.comment}`);
+        }
+      }
       results.push({
         input_id: items[i].id ?? `item_${i + 1}`,
-        ...scoreJson
+        scores: mergedScores,
+        comment: comments.join("\n")
       });
     }
 
@@ -254,7 +330,7 @@ runEvalBtn.addEventListener("click", async () => {
     const record = {
       task_type: taskType,
       model_name: modelName,
-      prompt_template: promptTemplate,
+      prompt_mode: "per_dimension",
       dimensions,
       raw_results: results,
       avg_score: report.avg_score,

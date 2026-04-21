@@ -61,10 +61,36 @@ button:disabled {
 }
 
 .dimension-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.dimension-row .dim-fields {
   display: grid;
   grid-template-columns: 1fr 2fr auto;
   gap: 8px;
-  margin-bottom: 8px;
+  align-items: start;
+}
+
+.dimension-row .dim-fields button {
+  width: auto;
+  margin-top: 22px;
+}
+
+.dimension-row .dim-prompt-label {
+  font-size: 0.9rem;
+  color: #374151;
+}
+
+.dimension-row .dim-prompt {
+  width: 100%;
+  min-height: 72px;
+  margin-top: 4px;
+  font-family: inherit;
 }
 
 #statusText {
