@@ -80,10 +80,16 @@
 
     <div class="card">
       <div class="row-actions">
+        <button id="backEditBtn" type="button" style="background:#f59e0b; color:#fff;">← 返回上一步（修改后重评）</button>
         <button id="downloadJsonBtn" type="button">下载 JSON 报告</button>
         <button id="downloadCsvBtn" type="button">下载 CSV（按维度展开）</button>
-        <a href="./app.html" style="align-self:center;">回评测页</a>
+        <a href="./app.html" style="align-self:center;">直接回评测页（不带原内容）</a>
+        <a href="./history.html" style="align-self:center;">历史记录</a>
       </div>
+      <p class="subtle" style="margin-top:6px;">
+        点击「返回上一步」将带回原来的<strong>任务类型 / 模型 / API 配置 / 评测维度 / 评分标准 / 提示词</strong>；
+        受浏览器安全限制，<strong>上传的媒体 / 数据文件需要重新选择</strong>，随后即可调整后重新评测。
+      </p>
       <details class="raw">
         <summary class="subtle">查看原始 JSON</summary>
         <pre id="reportJson"></pre>
@@ -235,6 +241,10 @@
       if (/[",\n]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
       return v;
     }
+
+    document.getElementById("backEditBtn").addEventListener("click", () => {
+      window.location.href = "./app.html?restore=1";
+    });
 
     document.getElementById("downloadJsonBtn").addEventListener("click", () => {
       const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });

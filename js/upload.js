@@ -454,6 +454,68 @@ function mergeItemsWithMedia(items, mediaMap) {
   });
 }
 
+const FORM_DRAFT_KEY = "eval_form_draft";
+
+function collectFormDraft() {
+  const rows = [...dimensionsEl.querySelectorAll(".dimension-row")];
+  const dims = rows.map((row) => ({
+    name: row.querySelector(".dim-name")?.value || "",
+    criteria: row.querySelector(".dim-criteria")?.value || "",
+    prompt: row.querySelector(".dim-prompt")?.value || ""
+  }));
+  return {
+    api_endpoint: apiEndpointEl?.value || "",
+    api_key: apiKeyEl?.value || "",
+    model_name: modelNameEl?.value || "",
+    task_type: taskTypeEl?.value || "",
+    video_frame_count: Number(videoFrameCountEl?.value || 0),
+    dimensions: dims,
+    saved_at: new Date().toISOString()
+  };
+}
+
+function saveFormDraft() {
+  try {
+    localStorage.setItem(FORM_DRAFT_KEY, JSON.stringify(collectFormDraft()));
+  } catch (_e) { /* ignore quota errors */ }
+}
+
+function applyFormDraft(draft) {
+  if (!draft || typeof draft !== "object") return false;
+  if (apiEndpointEl && draft.api_endpoint) apiEndpointEl.value = draft.api_endpoint;
+  if (apiKeyEl && draft.api_key) apiKeyEl.value = draft.api_key;
+  if (modelNameEl && draft.model_name) modelNameEl.value = draft.model_name;
+  if (taskTypeEl && draft.task_type) taskTypeEl.value = draft.task_type;
+  if (videoFrameCountEl && Number.isFinite(draft.video_frame_count)) {
+    videoFrameCountEl.value = String(draft.video_frame_count);
+  }
+  const dims = Array.isArray(draft.dimensions) ? draft.dimensions : [];
+  if (dims.length) {
+    dimensionsEl.innerHTML = "";
+    dims.forEach((d) => createDimensionRow(d.name || "", d.criteria || "", d.prompt || ""));
+    return true;
+  }
+  return false;
+}
+
+function tryRestoreFormDraft() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("restore") !== "1") return false;
+    const raw = localStorage.getItem(FORM_DRAFT_KEY);
+    if (!raw) return false;
+    const draft = JSON.parse(raw);
+    const ok = applyFormDraft(draft);
+    if (ok) {
+      setStatus("已恢复上次评测的配置（维度 / 提示词 / 基本设置）。媒体文件请重新选择，然后点击“开始评测”。");
+      history.replaceState({}, "", window.location.pathname);
+    }
+    return ok;
+  } catch (_e) {
+    return false;
+  }
+}
+
 function persistHistory(entry) {
   const key = "eval_history";
   const oldData = JSON.parse(localStorage.getItem(key) || "[]");
@@ -485,6 +547,7 @@ function init() {
   if (appConfig.apiKey) apiKeyEl.value = appConfig.apiKey;
   if (appConfig.modelName) modelNameEl.value = appConfig.modelName;
   loadTaskTemplate(taskTypeEl.value);
+  tryRestoreFormDraft();
 }
 
 loadTemplateBtn.addEventListener("click", () => {
@@ -700,6 +763,8 @@ runEvalBtn.addEventListener("click", async () => {
       dimensions: dimensions.map((d) => ({ name: d.name, criteria: d.criteria })),
       report: fullReport
     });
+
+    saveFormDraft();
 
     setStatus("评测完成，正在跳转报告页...");
     window.location.href = `./report.html?id=${encodeURIComponent(runId)}`;
