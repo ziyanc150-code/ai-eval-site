@@ -3,6 +3,7 @@ const newKeyEl = document.getElementById("newKey");
 const loadKeysBtn = document.getElementById("loadKeysBtn");
 const addKeyBtn = document.getElementById("addKeyBtn");
 const genKeyBtn = document.getElementById("genKeyBtn");
+const genSaveBtn = document.getElementById("genSaveBtn");
 const keysListEl = document.getElementById("keysList");
 const statusText = document.getElementById("statusText");
 
@@ -91,21 +92,22 @@ loadKeysBtn.addEventListener("click", async () => {
   await loadKeys();
 });
 
-genKeyBtn.addEventListener("click", () => {
-  newKeyEl.value = generateAccessKey();
-  setStatus("已生成新密钥，请点击“新增密钥”保存。");
-});
+if (genKeyBtn) {
+  genKeyBtn.addEventListener("click", () => {
+    newKeyEl.value = generateAccessKey();
+    setStatus("已生成到输入框，尚未写入云端。请点击「保存当前密钥」或「一键生成并保存」。");
+  });
+}
 
-addKeyBtn.addEventListener("click", async () => {
+async function saveKeyToCloud(key) {
   const token = getAdminToken();
-  const key = newKeyEl.value.trim();
   if (!token) {
     setStatus("请先填写管理员令牌。");
-    return;
+    return false;
   }
   if (!key || key.length < 8 || !/^[A-Za-z0-9_-]+$/.test(key)) {
     setStatus("密钥格式不正确。");
-    return;
+    return false;
   }
   const res = await fetch("/api/keys/add", {
     method: "POST",
@@ -115,12 +117,31 @@ addKeyBtn.addEventListener("click", async () => {
     },
     body: JSON.stringify({ key })
   });
+  const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    setStatus("新增失败，请检查管理员令牌。");
-    return;
+    setStatus(body.error ? `保存失败：${body.error}` : "保存失败，请检查管理员令牌与 Cloudflare KV 绑定。");
+    return false;
   }
+  return true;
+}
+
+if (genSaveBtn) {
+  genSaveBtn.addEventListener("click", async () => {
+    const key = generateAccessKey();
+    newKeyEl.value = key;
+    const ok = await saveKeyToCloud(key);
+    if (!ok) return;
+    setStatus(`已保存到云端。请复制以下密钥到首页登录：${key}`);
+    await loadKeys();
+  });
+}
+
+addKeyBtn.addEventListener("click", async () => {
+  const key = newKeyEl.value.trim();
+  const ok = await saveKeyToCloud(key);
+  if (!ok) return;
+  setStatus(`保存成功。请复制以下密钥到首页登录：${key}`);
   newKeyEl.value = "";
-  setStatus("新增成功。");
   await loadKeys();
 });
 

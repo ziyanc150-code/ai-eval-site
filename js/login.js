@@ -42,12 +42,16 @@ loginBtn.addEventListener("click", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ accessKey: key })
     });
-    if (!res.ok) {
-      setStatus("输入错误");
-      return;
-    }
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!data.valid) {
+      if (data.reason === "kv_not_bound") {
+        setStatus(data.message || "服务器未配置密钥存储，请联系管理员。");
+        return;
+      }
+      if (data.reason === "not_found") {
+        setStatus(data.message || "密钥不正确或未保存到云端。");
+        return;
+      }
       setStatus("输入错误");
       return;
     }
