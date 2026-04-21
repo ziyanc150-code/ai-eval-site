@@ -23,6 +23,68 @@ function getDefaultDimensions() {
   return [...DEFAULT_DIMENSIONS];
 }
 
+/**
+ * 把 item 中的媒体字段剥离出来，返回“只含文字字段”的 item 与媒体资源数组，
+ * 避免把超长的 Base64 Data URL 塞进 prompt 文本。
+ */
+function splitItemMedia(item) {
+  if (!item || typeof item !== "object") {
+    return { textItem: item, media: [] };
+  }
+  const media = [];
+  const textItem = {};
+  for (const [k, v] of Object.entries(item)) {
+    if (k === "image_url" && typeof v === "string" && v) {
+      media.push({ type: "image_url", url: v });
+    } else if (k === "video_url" && typeof v === "string" && v) {
+      media.push({ type: "video_url", url: v });
+    } else if (k === "frame_urls" && Array.isArray(v)) {
+      v.forEach((u) => u && media.push({ type: "image_url", url: u }));
+    } else if (k === "audio_url" && typeof v === "string" && v) {
+      media.push({ type: "audio_url", url: v });
+    } else {
+      textItem[k] = v;
+    }
+  }
+  return { textItem, media };
+}
+
+/** 从模型回传的字符串里尽量提取 JSON（容忍 ```json 围栏 / 前后多余文本） */
+function extractJsonFromText(text) {
+  if (typeof text !== "string") return null;
+  const stripped = text
+    .trim()
+    .replace(/^```(?:json|JSON)?\s*/i, "")
+    .replace(/```$/i, "")
+    .trim();
+  const direct = safeJsonParse(stripped);
+  if (direct) return direct;
+  const match = stripped.match(/\{[\s\S]*\}/);
+  if (match) {
+    const parsed = safeJsonParse(match[0]);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+/** 构造 OpenAI 兼容的 messages，多模态 content 数组 */
+function buildMessages(promptText, media) {
+  if (!media.length) {
+    return [{ role: "user", content: promptText }];
+  }
+  const parts = [{ type: "text", text: promptText }];
+  for (const m of media) {
+    if (m.type === "image_url") {
+      parts.push({ type: "image_url", image_url: { url: m.url } });
+    } else if (m.type === "video_url") {
+      parts.push({ type: "video_url", video_url: { url: m.url } });
+    } else if (m.type === "audio_url") {
+      parts.push({ type: "input_audio", input_audio: { data: m.url, format: "mp3" } });
+    }
+  }
+  return [{ role: "user", content: parts }];
+}
+
 async function evaluateOne({
   apiEndpoint,
   apiKey,
@@ -41,41 +103,76 @@ async function evaluateOne({
     throw new Error("请填写模型名称。");
   }
 
+  const { textItem, media } = splitItemMedia(item);
   const dimsText = buildDimensionsText(dimensions);
   const primary = dimensions[0] || {};
   const prompt = String(promptTemplate || "")
-    .replaceAll("{{task_type}}", taskType)
+    .replaceAll("{{task_type}}", taskType || "")
     .replaceAll("{{dimensions}}", dimsText)
     .replaceAll("{{dimension_name}}", primary.name || "")
     .replaceAll("{{criteria}}", primary.criteria || "")
-    .replaceAll("{{item}}", JSON.stringify(item, null, 2));
+    .replaceAll("{{item}}", JSON.stringify(textItem, null, 2));
 
   const payload = {
-    model: modelName,
-    task_type: taskType,
-    prompt,
-    dimensions,
-    input: item
+    model: String(modelName).trim(),
+    messages: buildMessages(prompt, media),
+    temperature: 0.2,
+    response_format: { type: "json_object" }
   };
 
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`
-    },
-    body: JSON.stringify(payload)
-  });
+  let res;
+  try {
+    res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`
+      },
+      body: JSON.stringify(payload)
+    });
+  } catch (netErr) {
+    throw new Error(`请求未送达（可能是 CORS 或网络错误）：${netErr.message}`);
+  }
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`API 错误 ${res.status}: ${text}`);
+    const text = await res.text().catch(() => "");
+    if (res.status === 400 && /response_format/i.test(text)) {
+      delete payload.response_format;
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const t2 = await res.text().catch(() => "");
+        throw new Error(`API 错误 ${res.status}: ${t2}`);
+      }
+    } else {
+      throw new Error(`API 错误 ${res.status}: ${text}`);
+    }
   }
 
   const data = await res.json();
-  const normalized = typeof data === "string" ? safeJsonParse(data) : data;
+  let content;
+  if (data && data.choices && data.choices[0]) {
+    const msg = data.choices[0].message || data.choices[0];
+    if (typeof msg?.content === "string") content = msg.content;
+    else if (Array.isArray(msg?.content)) {
+      content = msg.content.map((p) => p?.text || "").join("");
+    }
+  } else if (typeof data === "string") {
+    content = data;
+  } else if (data && (data.scores || data.comment)) {
+    return data;
+  }
+
+  if (!content) {
+    throw new Error(`模型返回格式无法解析：${JSON.stringify(data).slice(0, 300)}`);
+  }
+
+  const normalized = extractJsonFromText(content);
   if (!normalized) {
-    throw new Error("模型返回非 JSON，请检查 API 转接层。");
+    throw new Error(`模型返回不是 JSON：${content.slice(0, 300)}`);
   }
 
   return normalized;
