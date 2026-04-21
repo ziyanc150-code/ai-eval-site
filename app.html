@@ -49,8 +49,17 @@
       <h2>3) 上传数据</h2>
       <p class="hint">
         支持 <strong>文本（JSON / JSONL / XLSX）+ 图片 + 视频（含音轨）+ ZIP 压缩包</strong>，可任选一种或两者结合：<br />
-        • <strong>结构化数据文件（可选）</strong>：JSON / JSONL / XLSX（第一行为表头），字段可包含 <code>id、input_text、output_text、image_url、video_url、frame_urls、file（媒体文件名，用于匹配）</code>。<br />
-        • <strong>媒体文件（可选，多选）</strong>：直接上传图片 / 视频，或一个 <code>.zip</code>（自动解包，兼容 Windows 中文 GBK 文件名）。未提供数据文件时每个媒体文件成为一条样本；提供数据文件时按行中 <code>file</code> 或 <code>id</code> 与文件名匹配自动注入为 <code>image_url / video_url</code>（Base64 Data URL，<strong>视频完整包含音轨</strong>）。<br />
+        • <strong>结构化数据文件（可选）</strong>：JSON / JSONL / XLSX（第一行为表头）。<br />
+        &nbsp;&nbsp;支持的列名（<strong>中英均可</strong>，系统自动识别）：
+        <code>id / 编号</code>、
+        <code>input_text / prompt / 提示词 / 输入的prompt</code>、
+        <code>output_text / 输出 / 回答</code>、
+        <code>video_url / 视频 / 视频地址 / 输出的视频</code>、
+        <code>image_url / 图片 / 图片地址</code>、
+        <code>frame_urls / 关键帧</code>、
+        <code>file / 文件名</code>（用于与已上传媒体按文件名匹配）。<br />
+        • <strong>媒体文件（可选，多选）</strong>：直接上传图片 / 视频，或一个 <code>.zip</code>（自动解包，兼容 Windows 中文 GBK 文件名）。未提供数据文件时每个媒体文件成为一条样本；提供数据文件时按行中 <code>file</code> 或 <code>id</code> 与文件名匹配，自动注入为 <code>image_url / video_url</code>（Base64 Data URL，<strong>视频完整包含音轨</strong>）。<br />
+        • <strong style="color:#b91c1c;">⚠ 表格里不能写本机路径</strong>：<code>file:///D:/...</code> 或 <code>C:\Users\...</code> 这类是<strong>你电脑硬盘</strong>上的位置，浏览器受沙箱限制无法读取。遇到这种情况系统会自动取文件名，请把对应的视频 / 图片<strong>同时通过「媒体文件」输入框上传上来</strong>，系统会按文件名自动匹配。若是<strong>公网可访问的 http(s)://</strong> 链接则可直接写在表格里。<br />
         • 浏览器会把媒体读成 Base64 并随请求直传你的 API，<strong>单文件建议 ≤ 8 MB</strong>（视频尤需压缩），否则可能触发模型上下文或 API 限制。
       </p>
 

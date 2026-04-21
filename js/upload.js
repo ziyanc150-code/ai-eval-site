@@ -174,6 +174,94 @@ function parseJsonl(text) {
     .map((line) => JSON.parse(line));
 }
 
+const HEADER_ALIAS_MAP = {
+  input_text: [
+    "input_text", "input", "prompt", "question", "query", "text", "content",
+    "提示词", "提示", "输入", "输入文本", "输入的prompt", "输入提示", "输入内容",
+    "问题", "题目", "用户输入", "用户提示词"
+  ],
+  output_text: [
+    "output_text", "output", "response", "answer", "reply", "completion",
+    "输出", "输出文本", "输出的文本", "输出内容", "回答", "响应", "模型输出", "模型回复"
+  ],
+  video_url: [
+    "video_url", "video", "video_link", "video_path", "mp4",
+    "视频", "视频地址", "视频链接", "视频url", "输出视频", "输出的视频", "生成视频"
+  ],
+  image_url: [
+    "image_url", "image", "img", "image_link", "image_path", "picture",
+    "图片", "图像", "图片地址", "图片链接", "图片url", "输出图片", "输出的图片", "生成图片"
+  ],
+  frame_urls: [
+    "frame_urls", "frames", "frame_list", "keyframes",
+    "关键帧", "关键帧地址", "帧列表"
+  ],
+  file: [
+    "file", "filename", "file_name", "media_file",
+    "文件", "文件名", "附件", "附件名", "媒体文件"
+  ],
+  id: ["id", "uid", "uuid", "编号", "序号", "样本id", "样本编号"]
+};
+
+const HEADER_REVERSE_MAP = (() => {
+  const m = {};
+  for (const canon of Object.keys(HEADER_ALIAS_MAP)) {
+    for (const alias of HEADER_ALIAS_MAP[canon]) {
+      m[String(alias).toLowerCase().replace(/\s+/g, "")] = canon;
+    }
+  }
+  return m;
+})();
+
+function canonicalizeHeader(raw) {
+  const key = String(raw || "").toLowerCase().replace(/\s+/g, "").trim();
+  return HEADER_REVERSE_MAP[key] || String(raw || "").trim();
+}
+
+function isLocalFileRef(v) {
+  if (typeof v !== "string") return false;
+  const s = v.trim();
+  if (!s) return false;
+  if (/^file:\/\//i.test(s)) return true;
+  if (/^[a-zA-Z]:[\\\/]/.test(s)) return true;
+  if (s.startsWith("\\\\")) return true;
+  return false;
+}
+
+function extractBasename(p) {
+  return String(p || "").replace(/^file:\/+/i, "").replace(/[\\\/]+$/, "").split(/[\\\/]+/).pop() || "";
+}
+
+const PARSE_WARNINGS = { localPathCount: 0, localPathSamples: [] };
+
+function resetParseWarnings() {
+  PARSE_WARNINGS.localPathCount = 0;
+  PARSE_WARNINGS.localPathSamples = [];
+}
+
+function normalizeItemKeys(row) {
+  const out = {};
+  for (const k of Object.keys(row || {})) {
+    const canon = canonicalizeHeader(k);
+    if (out[canon] === undefined || out[canon] === "" || out[canon] === null) {
+      out[canon] = row[k];
+    }
+  }
+  for (const mediaKey of ["video_url", "image_url"]) {
+    const v = out[mediaKey];
+    if (isLocalFileRef(v)) {
+      const base = extractBasename(v);
+      PARSE_WARNINGS.localPathCount += 1;
+      if (PARSE_WARNINGS.localPathSamples.length < 3) {
+        PARSE_WARNINGS.localPathSamples.push(base || v);
+      }
+      if (base && !out.file) out.file = base;
+      delete out[mediaKey];
+    }
+  }
+  return out;
+}
+
 function readXlsxFile(file) {
   if (typeof XLSX === "undefined") {
     throw new Error("未加载表格解析库，请检查网络能否访问 cdnjs 上的 xlsx，或刷新页面重试。");
@@ -184,13 +272,7 @@ function readXlsxFile(file) {
     if (!sheetName) return [];
     const sheet = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-    return rows.map((row) => {
-      const out = {};
-      Object.keys(row).forEach((k) => {
-        out[String(k).trim()] = row[k];
-      });
-      return out;
-    });
+    return rows.map((row) => normalizeItemKeys(row));
   });
 }
 
@@ -200,9 +282,13 @@ async function readDataFile(file) {
     return readXlsxFile(file);
   }
   const text = await file.text();
-  if (file.name.endsWith(".jsonl")) return parseJsonl(text);
-  const data = JSON.parse(text);
-  return Array.isArray(data) ? data : [data];
+  const rawRows = file.name.endsWith(".jsonl")
+    ? parseJsonl(text)
+    : (() => {
+        const data = JSON.parse(text);
+        return Array.isArray(data) ? data : [data];
+      })();
+  return rawRows.map((r) => normalizeItemKeys(r));
 }
 
 function smartDecodeZipName(bytes) {
@@ -665,6 +751,7 @@ runEvalBtn.addEventListener("click", async () => {
 
     if (file) {
       setStatus("读取数据文件...");
+      resetParseWarnings();
       items = await readDataFile(file);
       if (!items.length) {
         setStatus("数据文件为空或没有有效行。");
@@ -672,6 +759,15 @@ runEvalBtn.addEventListener("click", async () => {
       }
       if (mediaResult.map.size) {
         items = mergeItemsWithMedia(items, mediaResult.map);
+      }
+      if (PARSE_WARNINGS.localPathCount > 0) {
+        const unmatched = items.filter((it) => !it.video_url && !it.image_url && it.file && !mediaResult.map.has(String(it.file).trim()) && !mediaResult.map.has(String(it.file).replace(/\.[^.]+$/, "").trim())).length;
+        const sample = PARSE_WARNINGS.localPathSamples.join("、");
+        if (unmatched > 0) {
+          const msg = `检测到 ${PARSE_WARNINGS.localPathCount} 条记录里写的是本地文件路径（如 ${sample}），浏览器无法读取你本机硬盘上的文件。\n请把对应的 ${unmatched} 个视频 / 图片文件，通过上面的「媒体文件」输入框（支持多选 / ZIP）一并上传，系统会按文件名自动匹配。\n当前仍会继续尝试评测，但未匹配到媒体的样本会没有分数。`;
+          setStatus(msg);
+          alert(msg);
+        }
       }
     } else {
       items = mediaEntriesToItems(mediaResult.entries);
