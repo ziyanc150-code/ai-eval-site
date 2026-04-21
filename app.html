@@ -46,48 +46,11 @@
     </section>
 
     <section class="card">
-      <h2>3) 从飞书导入（可选）</h2>
+      <h2>3) 上传数据</h2>
       <p class="hint">
-        支持 <strong>多维表格（Bitable）/ 电子表格（Sheet）/ 云空间文件（Drive，xlsx/图/视频）</strong>。App ID/Secret 仅存于你的浏览器 localStorage，不上传本站数据库；请求通过本站 Cloudflare Function 转发飞书接口（必须，因为飞书不支持浏览器直连）。
-      </p>
-      <div class="row">
-        <label style="flex:1">App ID
-          <input id="feishuAppId" type="text" placeholder="cli_..." autocomplete="off" />
-        </label>
-        <label style="flex:1">App Secret
-          <input id="feishuAppSecret" type="password" placeholder="仅浏览器保存" autocomplete="off" />
-        </label>
-      </div>
-      <label>飞书文档链接（Bitable 的 /base/...、Sheet 的 /sheets/... 或 Drive 的 /file/...）
-        <input id="feishuUrl" type="text" placeholder="https://xxx.feishu.cn/base/APPTOKEN?table=TBLID" />
-      </label>
-      <div class="row">
-        <label style="flex:1">table_id（URL 已含可留空）
-          <input id="feishuTableId" type="text" placeholder="tbl..." />
-        </label>
-        <label style="flex:1">Sheet 范围
-          <input id="feishuRange" type="text" placeholder="Sheet1!A1:E500" />
-        </label>
-        <label style="flex:1">最多拉取记录数
-          <input id="feishuMaxRecords" type="number" min="1" max="5000" value="500" />
-        </label>
-      </div>
-      <label class="row" style="align-items:center; gap:6px;">
-        <input id="feishuFetchAttachments" type="checkbox" style="width:auto;" checked /> 下载 Bitable 附件为 Base64（用于离线传给模型）
-      </label>
-      <div class="row">
-        <button id="feishuImportBtn" type="button">从飞书导入</button>
-        <button id="feishuClearBtn" type="button">清空导入</button>
-      </div>
-      <p id="feishuStatus" class="hint"></p>
-    </section>
-
-    <section class="card">
-      <h2>4) 上传数据</h2>
-      <p class="hint">
-        可任选一种或两者结合：<br />
+        支持 <strong>文本（JSON / JSONL / XLSX）+ 图片 + 视频（含音轨）</strong>，可任选一种或两者结合：<br />
         • <strong>结构化数据文件（可选）</strong>：JSON / JSONL / XLSX（第一行为表头），字段可包含 <code>id、input_text、output_text、image_url、video_url、frame_urls、file（媒体文件名，用于匹配）</code>。<br />
-        • <strong>媒体文件（可选，多选）</strong>：直接上传图片 / 视频。未提供数据文件时，每个媒体文件会成为一条样本；提供数据文件时，按行中 <code>file</code> 或 <code>id</code> 与文件名匹配，自动注入为 <code>image_url / video_url</code>（Base64 Data URL）。<br />
+        • <strong>媒体文件（可选，多选）</strong>：直接上传图片 / 视频。未提供数据文件时，每个媒体文件会成为一条样本；提供数据文件时，按行中 <code>file</code> 或 <code>id</code> 与文件名匹配，自动注入为 <code>image_url / video_url</code>（Base64 Data URL，<strong>视频完整包含音轨</strong>）。<br />
         • 浏览器会把媒体读成 Base64 并随请求直传你的 API，<strong>单文件建议 ≤ 8 MB</strong>（视频尤需压缩），否则可能触发模型上下文或 API 限制。
       </p>
 
@@ -122,7 +85,6 @@
   <script src="./js/auth.js"></script>
   <script src="./js/eval.js"></script>
   <script src="./js/supabase.js"></script>
-  <script src="./js/feishu.js"></script>
   <script src="./js/upload.js"></script>
 </body>
 </html>

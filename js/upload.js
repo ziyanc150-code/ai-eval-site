@@ -11,11 +11,6 @@ const dataFileEl = document.getElementById("dataFile");
 const mediaFilesEl = document.getElementById("mediaFiles");
 const videoFrameCountEl = document.getElementById("videoFrameCount");
 const mediaPreviewEl = document.getElementById("mediaPreview");
-const feishuImportBtn = document.getElementById("feishuImportBtn");
-const feishuClearBtn = document.getElementById("feishuClearBtn");
-const feishuStatusEl = document.getElementById("feishuStatus");
-
-let feishuItems = null;
 
 const apiEndpointEl = document.getElementById("apiEndpoint");
 const apiKeyEl = document.getElementById("apiKey");
@@ -398,11 +393,6 @@ function init() {
   if (appConfig.apiKey) apiKeyEl.value = appConfig.apiKey;
   if (appConfig.modelName) modelNameEl.value = appConfig.modelName;
   loadTaskTemplate(taskTypeEl.value);
-  if (window.Feishu && window.Feishu.initFeishuUI) window.Feishu.initFeishuUI();
-}
-
-function setFeishuStatus(msg) {
-  if (feishuStatusEl) feishuStatusEl.textContent = msg || "";
 }
 
 loadTemplateBtn.addEventListener("click", () => {
@@ -418,51 +408,6 @@ taskTypeEl.addEventListener("change", () => {
   loadTaskTemplate(taskTypeEl.value);
   setStatus("已切换任务类型模板。");
 });
-
-if (feishuImportBtn && window.Feishu) {
-  feishuImportBtn.addEventListener("click", async () => {
-    try {
-      feishuImportBtn.disabled = true;
-      feishuItems = null;
-      await window.Feishu.importFromFeishu({
-        setStatus: setFeishuStatus,
-        onItems: (items, meta) => {
-          if (meta && meta.source === "drive" && meta.data_url) {
-            setFeishuStatus(`已下载云空间文件（${meta.mime}，${(meta.size / 1024 / 1024).toFixed(2)} MB）。目前仅支持直接在媒体预览中作为单条样本使用；若是 xlsx，请下载后改走「结构化数据文件」上传。`);
-            if (mediaPreviewEl) {
-              renderMediaPreview([{
-                name: "feishu_drive_file",
-                size: meta.size || 0,
-                type: meta.mime && meta.mime.startsWith("video") ? "video" : "image",
-                dataUrl: meta.data_url
-              }]);
-            }
-            feishuItems = [{
-              id: "feishu_drive_file",
-              ...(meta.mime && meta.mime.startsWith("video") ? { video_url: meta.data_url } : { image_url: meta.data_url })
-            }];
-            return;
-          }
-          if (Array.isArray(items)) {
-            feishuItems = items;
-            setFeishuStatus(`已导入 ${items.length} 条记录（来源：${meta?.source || "feishu"}），将优先用于本次评测。`);
-          }
-        }
-      });
-    } catch (err) {
-      setFeishuStatus(`导入失败：${err.message}`);
-    } finally {
-      feishuImportBtn.disabled = false;
-    }
-  });
-}
-
-if (feishuClearBtn) {
-  feishuClearBtn.addEventListener("click", () => {
-    feishuItems = null;
-    setFeishuStatus("已清空飞书导入数据。");
-  });
-}
 
 if (mediaFilesEl) {
   mediaFilesEl.addEventListener("change", async () => {
@@ -524,8 +469,8 @@ runEvalBtn.addEventListener("click", async () => {
       setStatus("请填写模型名称。");
       return;
     }
-    if (!file && !mediaFiles.length && !(feishuItems && feishuItems.length)) {
-      setStatus("请至少上传数据文件、媒体文件，或从飞书导入数据。");
+    if (!file && !mediaFiles.length) {
+      setStatus("请至少上传数据文件或媒体文件。");
       return;
     }
     if (!dimensions.length) {
@@ -541,13 +486,7 @@ runEvalBtn.addEventListener("click", async () => {
       renderMediaPreview(mediaResult.entries);
     }
 
-    if (feishuItems && feishuItems.length) {
-      items = feishuItems.slice();
-      if (mediaResult.map.size) {
-        items = mergeItemsWithMedia(items, mediaResult.map);
-      }
-      setStatus(`使用飞书导入数据：${items.length} 条。`);
-    } else if (file) {
+    if (file) {
       setStatus("读取数据文件...");
       items = await readDataFile(file);
       if (!items.length) {
