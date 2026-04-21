@@ -6,6 +6,7 @@
 - `app.html`：评测主页面
 - `functions/api/validate-key.js`：校验密钥
 - `functions/api/eval.js`：服务端代调用模型 API（前端不暴露模型 Key）
+- `key-admin.html`：网页密钥管理页（增删 key）
 
 ## 关键安全设计
 
@@ -44,6 +45,21 @@ KV 的 key/value 建议：
 - `MODEL_API_ENDPOINT`：你的模型评测 API 地址
 - `MODEL_API_KEY`：你的平台模型 Key（Secret）
 - `MODEL_NAME`：默认模型名（可选）
+- `ADMIN_TOKEN`：密钥管理页使用的管理员令牌（必填，建议高强度随机串）
+
+## 网页管理密钥（已实现）
+
+访问 `https://你的域名/key-admin.html`：
+
+1. 输入管理员令牌（`ADMIN_TOKEN`）
+2. 点击“加载密钥列表”
+3. 可新增/删除登录密钥
+
+对应后端接口：
+
+- `GET /api/keys/list`
+- `POST /api/keys/add`
+- `POST /api/keys/delete`
 
 ## 评测请求流
 

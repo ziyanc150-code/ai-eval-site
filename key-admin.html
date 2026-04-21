@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>密钥管理</title>
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>访问密钥管理</h1>
+    <p>本页用于新增/删除可登录密钥。删除后即时失效。</p>
+
+    <section class="card">
+      <h2>管理员验证</h2>
+      <label>管理员令牌（ADMIN_TOKEN）
+        <input id="adminToken" type="password" placeholder="请输入管理员令牌" />
+      </label>
+      <button id="loadKeysBtn" type="button">加载密钥列表</button>
+      <p id="statusText"></p>
+    </section>
+
+    <section class="card">
+      <h2>新增密钥</h2>
+      <label>新密钥
+        <input id="newKey" type="text" placeholder="例如 teamA_2026_001" />
+      </label>
+      <button id="addKeyBtn" type="button">新增密钥</button>
+    </section>
+
+    <section class="card">
+      <h2>现有密钥</h2>
+      <div id="keysList"></div>
+    </section>
+
+    <a href="./app.html">回评测页</a>
+  </main>
+
+  <script src="./js/auth.js"></script>
+  <script src="./js/key-admin.js"></script>
+</body>
+</html>
