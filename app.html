@@ -48,18 +48,18 @@
     <section class="card">
       <h2>3) 上传数据</h2>
       <p class="hint">
-        支持 <strong>文本（JSON / JSONL / XLSX）+ 图片 + 视频（含音轨）</strong>，可任选一种或两者结合：<br />
+        支持 <strong>文本（JSON / JSONL / XLSX）+ 图片 + 视频（含音轨）+ ZIP 压缩包</strong>，可任选一种或两者结合：<br />
         • <strong>结构化数据文件（可选）</strong>：JSON / JSONL / XLSX（第一行为表头），字段可包含 <code>id、input_text、output_text、image_url、video_url、frame_urls、file（媒体文件名，用于匹配）</code>。<br />
-        • <strong>媒体文件（可选，多选）</strong>：直接上传图片 / 视频。未提供数据文件时，每个媒体文件会成为一条样本；提供数据文件时，按行中 <code>file</code> 或 <code>id</code> 与文件名匹配，自动注入为 <code>image_url / video_url</code>（Base64 Data URL，<strong>视频完整包含音轨</strong>）。<br />
+        • <strong>媒体文件（可选，多选）</strong>：直接上传图片 / 视频，或一个 <code>.zip</code>（自动解包，兼容 Windows 中文 GBK 文件名）。未提供数据文件时每个媒体文件成为一条样本；提供数据文件时按行中 <code>file</code> 或 <code>id</code> 与文件名匹配自动注入为 <code>image_url / video_url</code>（Base64 Data URL，<strong>视频完整包含音轨</strong>）。<br />
         • 浏览器会把媒体读成 Base64 并随请求直传你的 API，<strong>单文件建议 ≤ 8 MB</strong>（视频尤需压缩），否则可能触发模型上下文或 API 限制。
       </p>
 
-      <label>结构化数据文件（可选，.json / .jsonl / .xlsx）
-        <input id="dataFile" type="file" accept=".json,.jsonl,.xlsx,.xls" />
+      <label>结构化数据文件（可选，.json / .jsonl / .xlsx / .zip）
+        <input id="dataFile" type="file" accept=".json,.jsonl,.xlsx,.xls,.zip" />
       </label>
 
-      <label>媒体文件（可选，图片/视频，可多选）
-        <input id="mediaFiles" type="file" accept="image/*,video/*" multiple />
+      <label>媒体文件（可选，图片 / 视频 / ZIP，可多选）
+        <input id="mediaFiles" type="file" accept="image/*,video/*,.zip,application/zip" multiple />
       </label>
 
       <label>视频抽取关键帧数量（0 = 不抽帧；仅对视频生效）
@@ -82,6 +82,7 @@
   </main>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="./js/auth.js"></script>
   <script src="./js/eval.js"></script>
   <script src="./js/supabase.js"></script>

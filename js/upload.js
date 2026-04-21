@@ -198,6 +198,87 @@ async function readDataFile(file) {
   return Array.isArray(data) ? data : [data];
 }
 
+function smartDecodeZipName(bytes) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch (_e) {
+    try { return new TextDecoder("gbk").decode(bytes); } catch (_e2) {}
+    try { return new TextDecoder("gb18030").decode(bytes); } catch (_e3) {}
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+}
+
+function guessMimeFromName(name) {
+  const l = String(name || "").toLowerCase();
+  if (l.endsWith(".mp4") || l.endsWith(".m4v")) return "video/mp4";
+  if (l.endsWith(".webm")) return "video/webm";
+  if (l.endsWith(".mov")) return "video/quicktime";
+  if (l.endsWith(".mkv")) return "video/x-matroska";
+  if (l.endsWith(".avi")) return "video/x-msvideo";
+  if (l.endsWith(".png")) return "image/png";
+  if (/\.jpe?g$/.test(l)) return "image/jpeg";
+  if (l.endsWith(".gif")) return "image/gif";
+  if (l.endsWith(".webp")) return "image/webp";
+  if (l.endsWith(".bmp")) return "image/bmp";
+  if (l.endsWith(".avif")) return "image/avif";
+  if (l.endsWith(".heic")) return "image/heic";
+  if (l.endsWith(".json")) return "application/json";
+  if (l.endsWith(".jsonl")) return "application/jsonl";
+  if (l.endsWith(".xlsx")) return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  if (l.endsWith(".xls")) return "application/vnd.ms-excel";
+  return "";
+}
+
+async function unzipToFiles(zipFile, onProgress) {
+  if (typeof JSZip === "undefined") {
+    throw new Error("未加载 JSZip，请检查网络是否能访问 cdnjs，或刷新页面。");
+  }
+  const buf = await zipFile.arrayBuffer();
+  const zip = await JSZip.loadAsync(buf, { decodeFileName: smartDecodeZipName });
+  const entries = Object.values(zip.files).filter((e) => !e.dir);
+  const out = [];
+  for (let i = 0; i < entries.length; i += 1) {
+    const entry = entries[i];
+    if (onProgress) onProgress(i + 1, entries.length, entry.name);
+    const blob = await entry.async("blob");
+    const short = entry.name.split(/[\\/]/).pop() || entry.name;
+    const mime = guessMimeFromName(short) || blob.type || "";
+    out.push(new File([blob], short, { type: mime }));
+  }
+  return out;
+}
+
+async function expandZipFiles(files, onProgress) {
+  const result = [];
+  for (const f of files) {
+    const name = String(f.name || "").toLowerCase();
+    const isZip = name.endsWith(".zip") || (f.type || "").toLowerCase().includes("zip");
+    if (isZip) {
+      if (onProgress) onProgress(`正在解包 ${f.name}...`);
+      const inner = await unzipToFiles(f, (idx, total, inName) => {
+        if (onProgress) onProgress(`解包 ${f.name}: ${idx}/${total} (${inName})`);
+      });
+      result.push(...inner);
+    } else {
+      result.push(f);
+    }
+  }
+  return result;
+}
+
+function classifyFiles(files) {
+  const dataFiles = [];
+  const mediaFiles = [];
+  const others = [];
+  for (const f of files) {
+    const l = f.name.toLowerCase();
+    if (/\.(json|jsonl|xlsx|xls)$/.test(l)) dataFiles.push(f);
+    else if (detectMediaType(f)) mediaFiles.push(f);
+    else others.push(f);
+  }
+  return { dataFiles, mediaFiles, others };
+}
+
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -412,16 +493,28 @@ taskTypeEl.addEventListener("change", () => {
 if (mediaFilesEl) {
   mediaFilesEl.addEventListener("change", async () => {
     try {
-      const files = [...(mediaFilesEl.files || [])];
-      if (!files.length) {
+      const raw = [...(mediaFilesEl.files || [])];
+      if (!raw.length) {
         renderMediaPreview([]);
         return;
       }
-      setStatus(`读取媒体文件中（${files.length} 个）...`);
+      setStatus(`读取 ${raw.length} 个文件（含 ZIP 会自动解包）...`);
+      const expanded = await expandZipFiles(raw, (msg) => setStatus(msg));
+      const { mediaFiles: m } = classifyFiles(expanded);
+      if (!m.length) {
+        renderMediaPreview([]);
+        setStatus("ZIP / 选中文件里未识别到任何图片或视频。");
+        return;
+      }
       const frameCount = Number(videoFrameCountEl?.value || 0);
-      const { entries } = await processMediaFiles(files, frameCount);
+      setStatus(`读取媒体中（${m.length} 个，抽帧 ${frameCount}）...`);
+      const { entries } = await processMediaFiles(m, frameCount);
       renderMediaPreview(entries);
-      setStatus(`媒体文件已载入：${entries.length} 个。`);
+      const big = entries.filter((e) => (e.size || 0) > 8 * 1024 * 1024);
+      const totalMB = entries.reduce((s, e) => s + (e.size || 0), 0) / 1024 / 1024;
+      let msg = `媒体文件已载入：${entries.length} 个，约 ${totalMB.toFixed(2)} MB。`;
+      if (big.length) msg += ` ⚠ 其中 ${big.length} 个 > 8MB，Base64 后可能超出模型 API 上限，建议先压缩或删减。`;
+      setStatus(msg);
     } catch (err) {
       setStatus(`读取媒体失败：${err.message}`);
     }
@@ -448,9 +541,19 @@ runEvalBtn.addEventListener("click", async () => {
     const taskType = taskTypeEl.value;
     const accessKey = authUtils.getAccessKey();
     const dimensions = getDimensionsFromUI();
-    const file = dataFileEl.files?.[0];
-    const mediaFiles = [...(mediaFilesEl?.files || [])];
+    const rawDataFiles = [...(dataFileEl.files || [])];
+    const rawMediaFiles = [...(mediaFilesEl?.files || [])];
     const frameCount = Number(videoFrameCountEl?.value || 0);
+
+    let file = null;
+    let mediaFiles = [];
+    if (rawDataFiles.length || rawMediaFiles.length) {
+      setStatus("正在检查上传文件（含 ZIP 会自动解包）...");
+      const expanded = await expandZipFiles([...rawDataFiles, ...rawMediaFiles], (msg) => setStatus(msg));
+      const { dataFiles, mediaFiles: m } = classifyFiles(expanded);
+      file = dataFiles[0] || null;
+      mediaFiles = m;
+    }
 
     if (!accessKey) {
       setStatus("登录已失效，请重新登录。");
@@ -470,7 +573,7 @@ runEvalBtn.addEventListener("click", async () => {
       return;
     }
     if (!file && !mediaFiles.length) {
-      setStatus("请至少上传数据文件或媒体文件。");
+      setStatus("请至少上传数据文件或媒体文件（可以是 ZIP 压缩包）。");
       return;
     }
     if (!dimensions.length) {
